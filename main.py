@@ -72,12 +72,15 @@ def extract_color(image, hex_color, tolerance=30):
     # Create mask for the specific color
     mask = cv2.inRange(hsv, lower, upper)
 
-    # Clean up noise
-    kernel = np.ones((3, 3), np.uint8)
+    # Clean up noise with larger kernel for better results
+    kernel = np.ones((5, 5), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
 
-    # Invert so numbers are white on black background (better for OCR)
+    # Dilate slightly to make numbers thicker/clearer
+    mask = cv2.dilate(mask, kernel, iterations=1)
+
+    # Invert so we get BLACK numbers on WHITE background (standard for OCR)
     mask = cv2.bitwise_not(mask)
 
     return mask
