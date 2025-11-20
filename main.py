@@ -73,45 +73,42 @@ def flood_fill_numbers(image, detections, target_color_hex):
         seed_point = None
         for y in range(min_y, min(max_y + 1, h)):
             for x in range(min_x, min(max_x + 1, w)):
-                pixel_bgr = image[y, x]
                 pixel_hsv = hsv[y, x]
                 h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
                 if h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50:
                     seed_point = (x, y)
-                    seed_pixel = pixel_bgr
-                    print(f"      Number '{num}': Found seed at {seed_point}, pixel BGR: {pixel_bgr}, HSV: {pixel_hsv}")
+                    print(f"      Number '{num}': Found seed at {seed_point}")
                     break
             if seed_point:
                 break
 
         if not seed_point:
-            print(f"      WARNING: No seed point found for number '{num}' in bbox [{min_x},{min_y}] to [{max_x},{max_y}]")
+            print(f"      WARNING: No seed point found for number '{num}'")
             continue
 
-        # Create mask for this region (h+2, w+2 as required by OpenCV)
+        # Step 1: Create a working copy and convert all blue pixels in bbox to white
+        work_img = image.copy()
+        for y in range(min_y, min(max_y + 1, h)):
+            for x in range(min_x, min(max_x + 1, w)):
+                pixel_hsv = hsv[y, x]
+                h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
+                if h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50:
+                    work_img[y, x] = [255, 255, 255]  # Convert blue to white
+
+        # Step 2: Now flood fill the white region - it will stop at black boundaries
         mask = np.zeros((h + 2, w + 2), np.uint8)
+        lo_diff = (10, 10, 10)  # Small tolerance - we're filling white, stopping at black
+        up_diff = (10, 10, 10)
+        flags = 4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8)
 
-        # Flood fill - set lo_diff based on seed brightness to stop just before black
-        # Fill down to brightness of 10, stopping before pure black (0,0,0)
-        min_brightness = int(min(seed_pixel))
-        lo_diff = (min_brightness - 10, min_brightness - 10, min_brightness - 10)
-        up_diff = (255, 255, 255)  # Fill all the way to white
-        flags = 4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8)  # Fill mask with 255
-
-        # Fill mask (using a temp copy of image)
-        temp_img = image.copy()
-        num_filled = cv2.floodFill(temp_img, mask, seed_point, (0, 0, 0), lo_diff, up_diff, flags)
-
-        # Extract the filled region (remove 1-pixel border)
+        cv2.floodFill(work_img, mask, seed_point, (0, 0, 0), lo_diff, up_diff, flags)
         mask_region = mask[1:-1, 1:-1]
 
-        # Count how many pixels were filled
         filled_pixels = np.sum(mask_region == 255)
-        print(f"      Mask for '{num}': {filled_pixels} pixels filled, floodFill returned: {num_filled}")
+        print(f"      Mask for '{num}': {filled_pixels} pixels filled")
 
         # Store mask and color
         masks_to_apply.append((mask_region, fill_color, num))
-        print(f"      Mask created for number '{num}' (color: {COLORS[color_key]})")
 
     # NOW apply all masks to create final image
     print(f"    Applying {len(masks_to_apply)} masks to final image...")
