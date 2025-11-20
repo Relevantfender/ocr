@@ -14,7 +14,7 @@ from paddleocr import PaddleOCR
 # ===== CONFIGURATION =====
 # Set the hex color of the numbers you want to extract
 # Set to None to disable color extraction (process original image)
-TARGET_NUMBER_COLOR = '#3A77C2'  # Blue - change this to match your numbers
+TARGET_NUMBER_COLOR = '#1a6db3'  # Blue - change this to match your numbers
 COLOR_TOLERANCE = 30  # HSV tolerance (higher = more colors matched)
 
 # GPU Settings (requires CUDA and GPU version of paddlepaddle/pytorch)
@@ -318,7 +318,7 @@ def main():
 
     try:
         easy_reader = easyocr.Reader(['en'], gpu=USE_GPU)
-        paddle_ocr = PaddleOCR(use_textline_orientation=False, lang='en', use_gpu=USE_GPU)
+        paddle_ocr = PaddleOCR(use_textline_orientation=False, lang='en')
         print("✓ Models loaded\n")
     except Exception as e:
         print(f"\n❌ Error loading models: {e}")
