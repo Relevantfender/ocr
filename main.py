@@ -125,12 +125,13 @@ def flood_fill_numbers(image, detections, target_color_hex):
         pixels_changed += mask_pixels
         print(f"      Applied color {fill_color} for number '{num}' ({mask_pixels} pixels)")
 
-    # Step 5: Copy all black pixels from original to preserve boundaries
-    print("    Copying black boundaries from original...")
-    black_mask = np.all(image < 10, axis=2)  # Find black pixels in original
-    filled_img[black_mask] = [0, 0, 0]
-    black_pixels = np.sum(black_mask)
-    print(f"    Copied {black_pixels} black pixels from original")
+    # Step 5: Copy all dark pixels from original to preserve boundaries
+    print("    Copying dark boundaries from original...")
+    # Find dark pixels (black and near-black/gray) - tolerance of 80 for outlines
+    dark_mask = np.all(image < 80, axis=2)
+    filled_img[dark_mask] = image[dark_mask]  # Copy original dark pixel values
+    dark_pixels = np.sum(dark_mask)
+    print(f"    Copied {dark_pixels} dark pixels from original")
 
     print(f"    ✓ Flood fill complete! Total colored pixels: {pixels_changed}")
     return filled_img
