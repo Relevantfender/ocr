@@ -248,8 +248,11 @@ def process_with_easyocr(image_path, reader):
         # Save both versions for visual comparison
         base_path = image_path.replace('input', 'output/preprocessed')
         os.makedirs(os.path.dirname(base_path), exist_ok=True)
-        normal_path = base_path.replace('.', '_normal.')
-        inverted_path = base_path.replace('.', '_inverted.')
+
+        # Use proper extension splitting to avoid naming conflicts
+        name, ext = os.path.splitext(base_path)
+        normal_path = f"{name}_easyocr_normal{ext}"
+        inverted_path = f"{name}_easyocr_inverted{ext}"
 
         try:
             cv2.imwrite(normal_path, preprocessed)
@@ -359,8 +362,11 @@ def process_with_paddleocr(image_path, ocr):
         # Save both versions for visual comparison (same as EasyOCR)
         base_path = image_path.replace('input', 'output/preprocessed')
         os.makedirs(os.path.dirname(base_path), exist_ok=True)
-        normal_path = base_path.replace('.', '_paddle_normal.')
-        inverted_path = base_path.replace('.', '_paddle_inverted.')
+
+        # Use proper extension splitting to avoid naming conflicts
+        name, ext = os.path.splitext(base_path)
+        normal_path = f"{name}_paddleocr_normal{ext}"
+        inverted_path = f"{name}_paddleocr_inverted{ext}"
 
         try:
             cv2.imwrite(normal_path, preprocessed)
