@@ -45,70 +45,74 @@ def flood_fill_numbers(image, detections, target_color_hex):
     Returns:
         Image with flood-filled colored regions
     """
-    # Create a copy for flood filling
-    filled_img = image.copy()
+    h, w = image.shape[:2]
 
-    # Convert target color to BGR
+    # Convert target color to BGR and HSV
     target_bgr = hex_to_bgr(target_color_hex)
-
-    # Convert to HSV for better color matching
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     target_hsv = cv2.cvtColor(np.uint8([[target_bgr]]), cv2.COLOR_BGR2HSV)[0][0]
 
-    print(f"    Flood filling {len(detections)} detected numbers...")
+    print(f"    Creating flood fill masks for {len(detections)} numbers...")
+
+    # List to store (mask, color) tuples
+    masks_to_apply = []
 
     for num, bbox in detections:
-        # Get fill color for this number (cycle through 6 colors)
+        # Get fill color for this number
         color_key = ((num - 1) % 6) + 1
         fill_color = hex_to_bgr(COLORS[color_key])
 
         # Get bounding box coordinates
-        # bbox is [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
         pts = np.array(bbox, dtype=np.int32)
-
-        # Get bounding rectangle to search within
         x_coords = [pt[0] for pt in pts]
         y_coords = [pt[1] for pt in pts]
         min_x, max_x = int(min(x_coords)), int(max(x_coords))
         min_y, max_y = int(min(y_coords)), int(max(y_coords))
 
-        # Search for first pixel matching target color within bbox
+        # Find seed point (first blue pixel in bbox)
         seed_point = None
-        for y in range(min_y, max_y + 1):
-            for x in range(min_x, max_x + 1):
-                if 0 <= y < hsv.shape[0] and 0 <= x < hsv.shape[1]:
-                    pixel_hsv = hsv[y, x]
-                    # Check if pixel matches target color
-                    h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
-                    if h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50:
-                        seed_point = (x, y)
-                        break
+        for y in range(min_y, min(max_y + 1, h)):
+            for x in range(min_x, min(max_x + 1, w)):
+                pixel_hsv = hsv[y, x]
+                h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
+                if h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50:
+                    seed_point = (x, y)
+                    break
             if seed_point:
                 break
 
-        if seed_point:
-            # Create a mask for flood fill (must be h+2, w+2)
-            h, w = filled_img.shape[:2]
-            mask = np.zeros((h + 2, w + 2), np.uint8)
+        if not seed_point:
+            print(f"      WARNING: No seed point found for number '{num}'")
+            continue
 
-            # Flood fill parameters
-            lo_diff = (20, 20, 20)
-            up_diff = (20, 20, 20)
-            flags = 4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8)  # Fill mask with value 255
+        # Create mask for this region (h+2, w+2 as required by OpenCV)
+        mask = np.zeros((h + 2, w + 2), np.uint8)
 
-            # Fill the mask (not the image directly)
-            cv2.floodFill(filled_img, mask, seed_point, (0, 0, 0), lo_diff, up_diff, flags)
+        # Flood fill the mask
+        lo_diff = (30, 30, 30)  # Tolerance
+        up_diff = (30, 30, 30)
+        flags = 4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8)  # Fill mask with 255
 
-            # Extract the filled region from mask (remove 1-pixel border)
-            mask_region = mask[1:-1, 1:-1]
+        # Fill mask (using a temp copy of image)
+        temp_img = image.copy()
+        cv2.floodFill(temp_img, mask, seed_point, (0, 0, 0), lo_diff, up_diff, flags)
 
-            # Apply the fill color where mask is filled (value 255)
-            filled_img[mask_region == 255] = fill_color
+        # Extract the filled region (remove 1-pixel border)
+        mask_region = mask[1:-1, 1:-1]
 
-            print(f"      Number '{num}' filled with {COLORS[color_key]} at {seed_point}")
-        else:
-            print(f"      WARNING: Could not find seed point for number '{num}' in bbox")
+        # Store mask and color
+        masks_to_apply.append((mask_region, fill_color))
+        print(f"      Mask created for number '{num}' (color: {COLORS[color_key]}) at {seed_point}")
 
+    # NOW apply all masks to create final image
+    print(f"    Applying {len(masks_to_apply)} masks to final image...")
+    filled_img = image.copy()
+
+    for mask_region, fill_color in masks_to_apply:
+        # Apply this color where mask is 255
+        filled_img[mask_region == 255] = fill_color
+
+    print(f"    ✓ Flood fill complete!")
     return filled_img
 
 def create_side_by_side_output(original, filled, title="OCR Result"):
