@@ -41,7 +41,17 @@ def draw_comparison(image_path):
     # Process with PaddleOCR (normal polarity)
     print("\nProcessing with PaddleOCR...")
     preprocessed_bgr = cv2.cvtColor(preprocessed, cv2.COLOR_GRAY2BGR)
-    paddle_results = paddle_ocr.predict(preprocessed_bgr)
+
+    # CRITICAL FIX: Save to temp file and pass path instead of array
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+        temp_path = tmp.name
+        cv2.imwrite(temp_path, preprocessed_bgr)
+
+    try:
+        paddle_results = paddle_ocr.predict(temp_path)
+    finally:
+        os.unlink(temp_path)
 
     paddle_detections = []
     if paddle_results and isinstance(paddle_results, list) and len(paddle_results) > 0:

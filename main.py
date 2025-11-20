@@ -332,7 +332,19 @@ def process_with_paddleocr(image_path, ocr):
 
         print(f"      DEBUG: Sending to PaddleOCR - shape: {preprocessed_bgr.shape}, dtype: {preprocessed_bgr.dtype}")
 
-        results = ocr.predict(preprocessed_bgr)
+        # CRITICAL FIX: Save to temp file and pass path instead of array
+        # PaddleOCR's predict() with numpy array might have coordinate bugs
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+            temp_path = tmp.name
+            cv2.imwrite(temp_path, preprocessed_bgr)
+
+        try:
+            results = ocr.predict(temp_path)
+        finally:
+            import os
+            os.unlink(temp_path)  # Clean up temp file
+
         detections = []
 
         if not results or not isinstance(results, list) or len(results) == 0:
