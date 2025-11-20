@@ -330,6 +330,8 @@ def process_with_paddleocr(image_path, ocr):
         preprocessed_bgr = cv2.cvtColor(preprocessed_gray, cv2.COLOR_GRAY2BGR)
         assert preprocessed_bgr.shape[:2] == img.shape[:2], "BGR conversion changed dimensions!"
 
+        print(f"      DEBUG: Sending to PaddleOCR - shape: {preprocessed_bgr.shape}, dtype: {preprocessed_bgr.dtype}")
+
         results = ocr.predict(preprocessed_bgr)
         detections = []
 
@@ -351,6 +353,10 @@ def process_with_paddleocr(image_path, ocr):
                 if 0 <= num <= 10:
                     bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else bbox
                     detections.append((num, bbox_list))
+
+        # Debug first detection
+        if detections:
+            print(f"      DEBUG: First detection in {polarity_name} - Number '{detections[0][0]}' bbox: {detections[0][1]}")
 
         return detections
 
