@@ -250,9 +250,14 @@ def process_with_easyocr(image_path, reader):
         os.makedirs(os.path.dirname(base_path), exist_ok=True)
         normal_path = base_path.replace('.', '_normal.')
         inverted_path = base_path.replace('.', '_inverted.')
-        cv2.imwrite(normal_path, preprocessed)
-        cv2.imwrite(inverted_path, inverted)
-        print(f"    Saved: {os.path.basename(normal_path)} and {os.path.basename(inverted_path)}")
+
+        try:
+            cv2.imwrite(normal_path, preprocessed)
+            cv2.imwrite(inverted_path, inverted)
+            print(f"    Saved EasyOCR preprocessed: {os.path.basename(normal_path)} and {os.path.basename(inverted_path)}")
+            print(f"    Full path: {os.path.dirname(normal_path)}/")
+        except Exception as e:
+            print(f"    ERROR saving preprocessed images: {e}")
 
         print(f"    Testing EasyOCR with both polarities...")
 
@@ -356,8 +361,14 @@ def process_with_paddleocr(image_path, ocr):
         os.makedirs(os.path.dirname(base_path), exist_ok=True)
         normal_path = base_path.replace('.', '_paddle_normal.')
         inverted_path = base_path.replace('.', '_paddle_inverted.')
-        cv2.imwrite(normal_path, preprocessed)
-        cv2.imwrite(inverted_path, inverted)
+
+        try:
+            cv2.imwrite(normal_path, preprocessed)
+            cv2.imwrite(inverted_path, inverted)
+            print(f"    Saved PaddleOCR preprocessed: {os.path.basename(normal_path)} and {os.path.basename(inverted_path)}")
+            print(f"    Full path: {os.path.dirname(normal_path)}/")
+        except Exception as e:
+            print(f"    ERROR saving preprocessed images: {e}")
 
         print(f"    Testing PaddleOCR with both polarities...")
 
