@@ -73,26 +73,22 @@ def flood_fill_numbers(image, detections, target_color_hex):
         color_key = ((num - 1) % 6) + 1
         fill_color = hex_to_bgr(COLORS[color_key])
 
-        # Get bounding box coordinates
+        # Get bounding box coordinates and center
         pts = np.array(bbox, dtype=np.int32)
         x_coords = [pt[0] for pt in pts]
         y_coords = [pt[1] for pt in pts]
         min_x, max_x = int(min(x_coords)), int(max(x_coords))
         min_y, max_y = int(min(y_coords)), int(max(y_coords))
 
-        # Find seed point (first white pixel in bbox of work_img)
-        seed_point = None
-        for y in range(min_y, min(max_y + 1, h)):
-            for x in range(min_x, min(max_x + 1, w)):
-                if work_img[y, x][0] > 200:  # Check if pixel is white
-                    seed_point = (x, y)
-                    print(f"      Number '{num}': Found seed at {seed_point}")
-                    break
-            if seed_point:
-                break
+        # Use center of bounding box as seed point
+        center_x = (min_x + max_x) // 2
+        center_y = (min_y + max_y) // 2
+        seed_point = (center_x, center_y)
+        print(f"      Number '{num}': Using bbox center as seed at {seed_point}")
 
-        if not seed_point:
-            print(f"      WARNING: No seed point found for number '{num}'")
+        # Check if seed point is on white pixel (it should be)
+        if work_img[center_y, center_x][0] < 200:
+            print(f"      WARNING: Seed point for '{num}' not on white region, skipping")
             continue
 
         # Flood fill this connected white component
