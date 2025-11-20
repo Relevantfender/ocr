@@ -252,11 +252,13 @@ def process_with_paddleocr(image_path, ocr):
         print(f"    PaddleOCR: No text detected in image")
     else:
         print(f"    PaddleOCR: Found {len(results[0])} text regions")
-        for line in results[0]:
+        for idx, line in enumerate(results[0]):
+            print(f"    DEBUG: Line {idx}: type={type(line)}, len={len(line)}, content={line}")
             # PaddleOCR returns: [bbox, (text, confidence)]
             if len(line) == 2:
                 bbox = line[0]
                 text_info = line[1]
+                print(f"    DEBUG: text_info type={type(text_info)}, content={text_info}")
                 if isinstance(text_info, (list, tuple)) and len(text_info) == 2:
                     text, conf = text_info
                     text = text.strip()
@@ -265,6 +267,8 @@ def process_with_paddleocr(image_path, ocr):
                         num = int(text)
                         if 0 <= num <= 10:
                             detections.append((num, bbox))
+                else:
+                    print(f"    DEBUG: text_info check failed - is instance: {isinstance(text_info, (list, tuple))}, len: {len(text_info) if isinstance(text_info, (list, tuple)) else 'N/A'}")
 
     print(f"    PaddleOCR found {len(detections)} valid numbers (0-10)")
     output_img = draw_bounding_boxes(img, detections, "PaddleOCR", preprocessed)
