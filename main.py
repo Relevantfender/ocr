@@ -18,7 +18,7 @@ TARGET_NUMBER_COLOR = '#3A77C2'  # Blue - change this to match your numbers
 COLOR_TOLERANCE = 30  # HSV tolerance (higher = more colors matched)
 
 # GPU Settings (requires CUDA and GPU version of paddlepaddle/pytorch)
-USE_GPU = False  # Set to True to use GPU (much faster)
+USE_GPU = True  # Set to True to use GPU (much faster)
 # =========================
 
 # Color mapping for numbers (will be used later for floodFill)
