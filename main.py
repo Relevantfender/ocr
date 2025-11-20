@@ -117,7 +117,7 @@ def flood_fill_numbers(image, detections, target_color_hex):
 
 def create_side_by_side_output(original, filled, title="OCR Result"):
     """
-    Create side-by-side comparison of original and flood-filled images
+    Create side-by-side comparison of original and flood-filled images with legend
 
     Args:
         original: Original image
@@ -125,22 +125,75 @@ def create_side_by_side_output(original, filled, title="OCR Result"):
         title: Title for the output
 
     Returns:
-        Side-by-side image
+        Side-by-side image with legend
     """
     h, w = original.shape[:2]
 
-    # Create canvas for side-by-side display
-    canvas = np.zeros((h, w * 2, 3), dtype=np.uint8)
+    # Calculate legend width based on image size
+    legend_width = max(250, int(w * 0.15))
+
+    # Create canvas: original + filled + legend
+    canvas = np.ones((h, w * 2 + legend_width, 3), dtype=np.uint8) * 255
 
     # Place images
     canvas[:h, :w] = original
-    canvas[:h, w:] = filled
+    canvas[:h, w:w*2] = filled
 
     # Add labels
-    cv2.putText(canvas, "Original", (10, 30),
-               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-    cv2.putText(canvas, "Flood Filled", (w + 10, 30),
-               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    font_scale = max(0.7, h / 1000)
+    cv2.putText(canvas, "Original", (10, 40),
+               cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), 2)
+    cv2.putText(canvas, "Flood Filled", (w + 10, 40),
+               cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), 2)
+
+    # Draw legend on the right
+    legend_x = w * 2 + 20
+    legend_y = 80
+
+    # Legend title
+    cv2.putText(canvas, "Legend", (legend_x, 50),
+               cv2.FONT_HERSHEY_SIMPLEX, font_scale * 1.2, (0, 0, 0), 2)
+
+    # Draw color boxes for each region
+    box_size = max(40, int(h * 0.04))
+    spacing = max(70, int(h * 0.06))
+
+    for region_num, hex_color in COLORS.items():
+        color_bgr = hex_to_bgr(hex_color)
+
+        # Draw filled color box
+        cv2.rectangle(canvas,
+                     (legend_x, legend_y),
+                     (legend_x + box_size, legend_y + box_size),
+                     color_bgr, -1)
+
+        # Draw border
+        cv2.rectangle(canvas,
+                     (legend_x, legend_y),
+                     (legend_x + box_size, legend_y + box_size),
+                     (0, 0, 0), 2)
+
+        # Add region text
+        text = f"Region {region_num}"
+        cv2.putText(canvas, text,
+                   (legend_x + box_size + 10, legend_y + box_size // 2 + 5),
+                   cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.7, (0, 0, 0), 2)
+
+        # Add hex color code below
+        cv2.putText(canvas, hex_color,
+                   (legend_x + box_size + 10, legend_y + box_size // 2 + 20),
+                   cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.5, (100, 100, 100), 1)
+
+        legend_y += spacing
+
+    # Add note about number cycling
+    note_y = legend_y + 20
+    cv2.putText(canvas, "Numbers cycle", (legend_x, note_y),
+               cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.6, (100, 100, 100), 1)
+    cv2.putText(canvas, "through regions", (legend_x, note_y + 20),
+               cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.6, (100, 100, 100), 1)
+    cv2.putText(canvas, "1-6 repeatedly", (legend_x, note_y + 40),
+               cv2.FONT_HERSHEY_SIMPLEX, font_scale * 0.6, (100, 100, 100), 1)
 
     return canvas
 
