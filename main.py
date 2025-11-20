@@ -90,9 +90,11 @@ def flood_fill_numbers(image, detections, target_color_hex):
         # Create mask for this region (h+2, w+2 as required by OpenCV)
         mask = np.zeros((h + 2, w + 2), np.uint8)
 
-        # Flood fill the mask
-        lo_diff = (30, 30, 30)  # Tolerance
-        up_diff = (30, 30, 30)
+        # Flood fill the mask - fill the number region until hitting black background
+        # lo_diff: tolerance going darker - should stop before reaching black (0,0,0)
+        # up_diff: tolerance going brighter - can go to white
+        lo_diff = (150, 150, 150)  # Stop before reaching pure black
+        up_diff = (250, 250, 250)  # Fill up to white
         flags = 4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8)  # Fill mask with 255
 
         # Fill mask (using a temp copy of image)
