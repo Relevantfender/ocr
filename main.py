@@ -27,6 +27,8 @@ COLORS = {
     2: '#3A77C2',  # deep denim blue
     3: '#E7C85A',  # soft golden yellow
     4: '#4FA36E',  # medium jade green
+    5: '#8B5CF6',  # purple
+    6: '#EC4899',  # pink
 }
 
 def hex_to_bgr(hex_color):
@@ -52,15 +54,19 @@ def get_images_from_folder(folder='input'):
 def extract_color(image, hex_color, tolerance=30):
     """
     Extract specific hex color from image and create clean binary mask
+    GUARANTEES output has EXACT same dimensions as input - no resizing!
 
     Args:
         image: Input image (BGR)
-        hex_color: Hex color string (e.g., '#3A77C2')
+        hex_color: Hex color string (e.g., '#1a6db3')
         tolerance: HSV tolerance for color matching (default: 30)
 
     Returns:
-        Preprocessed image with white numbers on black background
+        Preprocessed image with BLACK numbers on WHITE background, same size as input
     """
+    # Get original dimensions - we will NOT change these
+    h, w = image.shape[:2]
+
     # Convert hex to BGR
     target_bgr = hex_to_bgr(hex_color)
 
@@ -76,12 +82,16 @@ def extract_color(image, hex_color, tolerance=30):
     mask = cv2.inRange(hsv, lower, upper)
 
     # Clean up noise with minimal kernel to keep numbers sharp
+    # Using (2,2) kernel to avoid any edge effects that could shift pixels
     kernel = np.ones((2, 2), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
 
     # Invert so we get BLACK numbers on WHITE background (standard for OCR)
     mask = cv2.bitwise_not(mask)
+
+    # Verify dimensions haven't changed (they shouldn't, but safety check)
+    assert mask.shape[:2] == (h, w), f"Dimension mismatch! Input: {(h,w)}, Output: {mask.shape[:2]}"
 
     return mask
 
@@ -109,14 +119,15 @@ def draw_bounding_boxes(image, detections, model_name, preprocessed=None):
         else:
             preprocessed_bgr = preprocessed
 
-        # Resize preprocessed to match original height
+        # CRITICAL: Preprocessed MUST be same dimensions as original
+        # If not, something went wrong in extract_color()
         prep_h, prep_w = preprocessed_bgr.shape[:2]
-        if prep_h != h:
-            scale = h / prep_h
-            new_w = int(prep_w * scale)
-            preprocessed_bgr = cv2.resize(preprocessed_bgr, (new_w, h))
+        if prep_h != h or prep_w != w:
+            print(f"WARNING: Dimension mismatch! Original: {(h,w)}, Preprocessed: {(prep_h,prep_w)}")
+            # Force resize to match (shouldn't be needed if extract_color works correctly)
+            preprocessed_bgr = cv2.resize(preprocessed_bgr, (w, h))
 
-        prep_width = preprocessed_bgr.shape[1]
+        prep_width = w  # Same width as original
 
         # Add label to preprocessed
         label_img = preprocessed_bgr.copy()
@@ -130,7 +141,9 @@ def draw_bounding_boxes(image, detections, model_name, preprocessed=None):
         canvas[:h, :prep_width] = label_img
         canvas[:h, prep_width:prep_width + w] = img
 
-        # Adjust offset for drawing bboxes and legend
+        # Bounding boxes from preprocessed are at coords (0 to w, 0 to h)
+        # On filtered side: draw at original coords
+        # On original side: draw at coords + prep_width offset
         bbox_offset = prep_width
         legend_x = prep_width + w + 20
     else:
@@ -143,8 +156,8 @@ def draw_bounding_boxes(image, detections, model_name, preprocessed=None):
 
     # Draw bounding boxes
     for number, bbox in detections:
-        # Get color based on number (cycle through 4 colors)
-        color_key = ((number - 1) % 4) + 1
+        # Get color based on number (cycle through 6 colors)
+        color_key = ((number - 1) % 6) + 1
         color_hex = COLORS[color_key]
         color_bgr = hex_to_bgr(color_hex)
 
