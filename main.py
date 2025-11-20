@@ -155,12 +155,25 @@ def draw_bounding_boxes(image, detections, model_name, preprocessed=None):
                 if isinstance(bbox[0], (list, tuple)) and len(bbox[0]) == 2:
                     # Polygon format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
                     pts = np.array(bbox, dtype=np.int32)
-                    pts[:, 0] += bbox_offset  # Apply offset for x coordinates
-                    cv2.polylines(canvas, [pts], True, color_bgr, 3)
+
+                    # Draw on filtered image (if shown) at original coordinates
+                    if preprocessed is not None:
+                        cv2.polylines(canvas, [pts], True, color_bgr, 2)
+
+                    # Draw on original image with offset
+                    pts_offset = pts.copy()
+                    pts_offset[:, 0] += bbox_offset
+                    cv2.polylines(canvas, [pts_offset], True, color_bgr, 3)
                     label_x, label_y = int(bbox[0][0]) + bbox_offset, int(bbox[0][1])
                 else:
                     # Rectangle format: (x, y, w, h)
                     x, y, bw, bh = bbox
+
+                    # Draw on filtered image (if shown)
+                    if preprocessed is not None:
+                        cv2.rectangle(canvas, (x, y), (x + bw, y + bh), color_bgr, 2)
+
+                    # Draw on original image with offset
                     cv2.rectangle(canvas, (x + bbox_offset, y), (x + bbox_offset + bw, y + bh), color_bgr, 3)
                     label_x, label_y = x + bbox_offset, y
 
