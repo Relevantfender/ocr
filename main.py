@@ -284,21 +284,13 @@ def process_with_easyocr(image_path, reader):
                 if 0 <= num <= 10:
                     detections_inverted.append((num, bbox))
 
-        # Choose the best result
-        if len(detections_inverted) > len(detections_normal):
-            best_detections = detections_inverted
-            best_polarity = "inverted (white-on-black)"
-            preprocessed = inverted  # Use inverted for display
-        else:
-            best_detections = detections_normal
-            best_polarity = "normal (black-on-white)"
+        print(f"    EasyOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)}")
 
-        print(f"    EasyOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)} → Using {best_polarity}")
+        # Output BOTH versions so user can compare
+        output_normal = draw_bounding_boxes(img, detections_normal, "EasyOCR-Normal", preprocessed)
+        output_inverted = draw_bounding_boxes(img, detections_inverted, "EasyOCR-Inverted", inverted)
 
-        # Debug bbox format
-        if best_detections:
-            sample_bbox = best_detections[0][1]
-            print(f"    EasyOCR bbox format: {sample_bbox}")
+        return [output_normal, output_inverted]
 
     else:
         results = reader.readtext(image_path)
@@ -309,9 +301,9 @@ def process_with_easyocr(image_path, reader):
                 if 0 <= num <= 10:
                     best_detections.append((num, bbox))
 
-    print(f"    EasyOCR found {len(best_detections)} numbers")
-    output_img = draw_bounding_boxes(img, best_detections, "EasyOCR", preprocessed)
-    return output_img
+        print(f"    EasyOCR found {len(best_detections)} numbers")
+        output_img = draw_bounding_boxes(img, best_detections, "EasyOCR", None)
+        return [output_img]
 
 
 def process_with_paddleocr(image_path, ocr):
@@ -384,22 +376,14 @@ def process_with_paddleocr(image_path, ocr):
         # Test 2: White text on black background (inverted)
         detections_inverted = process_polarity(inverted, "inverted")
 
-        # Choose the best result
-        if len(detections_inverted) > len(detections_normal):
-            best_detections = detections_inverted
-            best_polarity = "inverted (white-on-black)"
-            preprocessed = inverted
-        else:
-            best_detections = detections_normal
-            best_polarity = "normal (black-on-white)"
+        print(f"    PaddleOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)}")
 
-        print(f"    PaddleOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)} → Using {best_polarity}")
+        # Output BOTH versions so user can compare
+        output_normal = draw_bounding_boxes(img, detections_normal, "PaddleOCR-Normal", preprocessed)
+        output_inverted = draw_bounding_boxes(img, detections_inverted, "PaddleOCR-Inverted", inverted)
 
-        # Debug bbox format
-        if best_detections:
-            sample_bbox = best_detections[0][1]
-            print(f"    PaddleOCR bbox format: {sample_bbox}")
-            print(f"    PaddleOCR: Found {len(best_detections)} valid numbers (0-10)")
+        return [output_normal, output_inverted]
+
     else:
         results = ocr.predict(image_path)
         # Process without preprocessing
@@ -416,8 +400,8 @@ def process_with_paddleocr(image_path, ocr):
                             bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else bbox
                             best_detections.append((num, bbox_list))
 
-    output_img = draw_bounding_boxes(img, best_detections, "PaddleOCR", preprocessed)
-    return output_img
+        output_img = draw_bounding_boxes(img, best_detections, "PaddleOCR", None)
+        return [output_img]
 
 def main():
     """Main processing loop"""
@@ -468,9 +452,16 @@ def main():
         # Process with EasyOCR
         try:
             print("  Processing with EasyOCR...")
-            result = process_with_easyocr(image_path, easy_reader)
-            cv2.imwrite(f'output/easyocr/{filename}', result)
-            print(f"  ✓ EasyOCR -> output/easyocr/{filename}")
+            results = process_with_easyocr(image_path, easy_reader)
+            # results is a list of images (normal and inverted, or just one)
+            if len(results) == 2:
+                name, ext = os.path.splitext(filename)
+                cv2.imwrite(f'output/easyocr/{name}_normal{ext}', results[0])
+                cv2.imwrite(f'output/easyocr/{name}_inverted{ext}', results[1])
+                print(f"  ✓ EasyOCR -> output/easyocr/{name}_normal{ext} and {name}_inverted{ext}")
+            else:
+                cv2.imwrite(f'output/easyocr/{filename}', results[0])
+                print(f"  ✓ EasyOCR -> output/easyocr/{filename}")
         except Exception as e:
             print(f"  ❌ EasyOCR error: {e}")
 
@@ -478,9 +469,16 @@ def main():
         # Process with PaddleOCR
         try:
             print("  Processing with PaddleOCR...")
-            result = process_with_paddleocr(image_path, paddle_ocr)
-            cv2.imwrite(f'output/paddleocr/{filename}', result)
-            print(f"  ✓ PaddleOCR -> output/paddleocr/{filename}")
+            results = process_with_paddleocr(image_path, paddle_ocr)
+            # results is a list of images (normal and inverted, or just one)
+            if len(results) == 2:
+                name, ext = os.path.splitext(filename)
+                cv2.imwrite(f'output/paddleocr/{name}_normal{ext}', results[0])
+                cv2.imwrite(f'output/paddleocr/{name}_inverted{ext}', results[1])
+                print(f"  ✓ PaddleOCR -> output/paddleocr/{name}_normal{ext} and {name}_inverted{ext}")
+            else:
+                cv2.imwrite(f'output/paddleocr/{filename}', results[0])
+                print(f"  ✓ PaddleOCR -> output/paddleocr/{filename}")
         except Exception as e:
             print(f"  ❌ PaddleOCR error: {e}")
 
