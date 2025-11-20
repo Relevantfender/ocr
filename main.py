@@ -286,6 +286,17 @@ def process_with_easyocr(image_path, reader):
 
         print(f"    EasyOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)}")
 
+        # Debug: Show sample EasyOCR bbox format
+        if detections_normal:
+            sample_num, sample_bbox = detections_normal[0]
+            print(f"    EasyOCR sample bbox: Number '{sample_num}' at {sample_bbox}")
+            print(f"    EasyOCR bbox type: {type(sample_bbox)}, point 0: {sample_bbox[0]}")
+            # Calculate bbox center for comparison
+            if len(sample_bbox) == 4:
+                center_x = sum(pt[0] for pt in sample_bbox) / 4
+                center_y = sum(pt[1] for pt in sample_bbox) / 4
+                print(f"    EasyOCR bbox center: ({center_x:.1f}, {center_y:.1f})")
+
         # Output BOTH versions so user can compare
         output_normal = draw_bounding_boxes(img, detections_normal, "EasyOCR-Normal", preprocessed)
         output_inverted = draw_bounding_boxes(img, detections_inverted, "EasyOCR-Inverted", inverted)
@@ -377,6 +388,17 @@ def process_with_paddleocr(image_path, ocr):
         detections_inverted = process_polarity(inverted, "inverted")
 
         print(f"    PaddleOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)}")
+
+        # Debug: Show sample PaddleOCR bbox format
+        if detections_normal:
+            sample_num, sample_bbox = detections_normal[0]
+            print(f"    PaddleOCR sample bbox: Number '{sample_num}' at {sample_bbox}")
+            print(f"    PaddleOCR bbox type: {type(sample_bbox)}, point 0: {sample_bbox[0]}")
+            # Calculate bbox center for comparison
+            if len(sample_bbox) == 4:
+                center_x = sum(pt[0] for pt in sample_bbox) / 4
+                center_y = sum(pt[1] for pt in sample_bbox) / 4
+                print(f"    PaddleOCR bbox center: ({center_x:.1f}, {center_y:.1f})")
 
         # Output BOTH versions so user can compare
         output_normal = draw_bounding_boxes(img, detections_normal, "PaddleOCR-Normal", preprocessed)
