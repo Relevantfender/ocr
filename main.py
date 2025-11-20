@@ -54,20 +54,31 @@ def flood_fill_numbers(image, detections, target_color_hex):
 
     print(f"    Creating flood fill masks for {len(detections)} numbers...")
 
-    # Step 1: Create work image - convert ALL blue pixels to white (do this once)
-    print("    Converting all blue pixels to white...")
-    work_img = image.copy()
+    # Step 1: Create "boundaries only" image - white background + black outlines only (no blue)
+    print("    Creating boundaries-only image (removing blue, keeping only black outlines)...")
+    work_img = np.ones((h, w, 3), dtype=np.uint8) * 255  # Start with white canvas
+
+    # Copy only the boundary pixels (not blue, not white) - black outlines only
     for y in range(h):
         for x in range(w):
             pixel_hsv = hsv[y, x]
+            pixel_bgr = image[y, x]
+
+            # Check if it's blue (number pixel) - skip these
             h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
-            if h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50:
-                work_img[y, x] = [255, 255, 255]
+            is_blue = (h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50)
+
+            # Check if it's white background - skip these
+            is_white = np.all(pixel_bgr > 200)
+
+            # If it's neither blue nor white, it's a boundary - copy it
+            if not is_blue and not is_white:
+                work_img[y, x] = pixel_bgr
 
     # List to store (mask, color) tuples
     masks_to_apply = []
 
-    # Step 2: For each number, flood fill its connected white component
+    # Step 2: For each number, flood fill the white space inside its black outline
     for num, bbox in detections:
         # Get fill color for this number
         color_key = ((num - 1) % 6) + 1
@@ -121,26 +132,13 @@ def flood_fill_numbers(image, detections, target_color_hex):
         pixels_changed += mask_pixels
         print(f"      Applied color {fill_color} for number '{num}' ({mask_pixels} pixels)")
 
-    # Step 5: Copy boundary pixels - exclude white and blue, keep only dark boundaries
-    print("    Copying boundary pixels from original...")
-
-    # Create mask excluding white pixels (background)
-    not_white = np.any(image < 200, axis=2)
-
-    # Create mask excluding blue pixels (the numbers we converted)
-    not_blue = np.zeros((h, w), dtype=bool)
-    for y in range(h):
-        for x in range(w):
-            pixel_hsv = hsv[y, x]
-            h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
-            is_blue = (h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50)
-            not_blue[y, x] = not is_blue
-
-    # Combine: pixels that are neither white nor blue = boundaries
-    boundary_mask = not_white & not_blue
-    filled_img[boundary_mask] = image[boundary_mask]
+    # Step 5: Copy black boundary pixels from work_img (which has boundaries only)
+    print("    Overlaying black boundaries...")
+    # Find non-white pixels in work_img = black boundaries
+    boundary_mask = np.any(work_img < 200, axis=2)
+    filled_img[boundary_mask] = work_img[boundary_mask]
     boundary_pixels = np.sum(boundary_mask)
-    print(f"    Copied {boundary_pixels} boundary pixels from original")
+    print(f"    Overlaid {boundary_pixels} boundary pixels")
 
     print(f"    ✓ Flood fill complete! Total colored pixels: {pixels_changed}")
     return filled_img
