@@ -303,9 +303,20 @@ def main():
     # Initialize models
     print("Initializing OCR models...")
     print(f"GPU mode: {'ENABLED' if USE_GPU else 'DISABLED'}")
-    easy_reader = easyocr.Reader(['en'], gpu=USE_GPU)
-    paddle_ocr = PaddleOCR(use_textline_orientation=False, lang='en', use_gpu=USE_GPU)
-    print("✓ Models loaded\n")
+
+    if USE_GPU:
+        print("Note: GPU requires proper CUDA setup. See GPU_SETUP.md if you get errors.")
+
+    try:
+        easy_reader = easyocr.Reader(['en'], gpu=USE_GPU)
+        paddle_ocr = PaddleOCR(use_textline_orientation=False, lang='en', use_gpu=USE_GPU)
+        print("✓ Models loaded\n")
+    except Exception as e:
+        print(f"\n❌ Error loading models: {e}")
+        print("\nIf GPU is enabled and failing:")
+        print("1. Check GPU_SETUP.md for installation instructions")
+        print("2. Or set USE_GPU = False in main.py to use CPU\n")
+        return
 
     # Process each image
     for idx, image_path in enumerate(images, 1):
