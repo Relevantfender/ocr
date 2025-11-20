@@ -93,16 +93,12 @@ def flood_fill_numbers(image, detections, target_color_hex):
             mask = np.zeros((h + 2, w + 2), np.uint8)
 
             # FloodFill parameters
-            lo_diff = (10, 10, 10)  # Lower bound difference
-            up_diff = (10, 10, 10)  # Upper bound difference
-            flags = 4 | cv2.FLOODFILL_FIXED_RANGE | cv2.FLOODFILL_MASK_ONLY
+            lo_diff = (15, 15, 15)  # Lower bound difference
+            up_diff = (15, 15, 15)  # Upper bound difference
+            flags = 4 | cv2.FLOODFILL_FIXED_RANGE  # Removed MASK_ONLY flag
 
-            # Fill the mask
+            # Perform flood fill directly on the image
             cv2.floodFill(filled_img, mask, seed_point, fill_color, lo_diff, up_diff, flags)
-
-            # Apply the mask to fill the region
-            mask_crop = mask[1:-1, 1:-1]  # Remove the 1-pixel border
-            filled_img[mask_crop == 1] = fill_color
 
             print(f"      Number '{num}' filled with color {COLORS[color_key]} at {seed_point}")
         else:
