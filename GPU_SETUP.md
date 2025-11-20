@@ -48,7 +48,43 @@ GPU mode: ENABLED
 
 And PaddleOCR will use GPU for processing (much faster!).
 
+## WSL2 (Windows Subsystem for Linux) Setup
+
+WSL2 requires additional setup for GPU:
+
+1. **Install NVIDIA CUDA Toolkit in WSL2:**
+```bash
+wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-keyring_1.1-1_all.deb
+sudo dpkg -i cuda-keyring_1.1-1_all.deb
+sudo apt-get update
+sudo apt-get -y install cuda-toolkit-12-3
+```
+
+2. **Set environment variables:**
+Add to `~/.bashrc`:
+```bash
+export PATH=/usr/local/cuda-12.3/bin:$PATH
+export LD_LIBRARY_PATH=/usr/local/cuda-12.3/lib64:$LD_LIBRARY_PATH
+```
+
+3. **Reload shell:**
+```bash
+source ~/.bashrc
+```
+
+4. **Verify CUDA:**
+```bash
+nvcc --version
+```
+
+5. **Then install paddlepaddle-gpu** as shown above.
+
 ## Troubleshooting
+
+**"libcusolver.so.12: cannot open shared object file"** (WSL2)
+- CUDA libraries not installed in WSL2
+- Follow WSL2 setup steps above
+- Or set `USE_GPU = False` to use CPU mode
 
 **"ImportError: cannot import name..."**
 - Your paddlepaddle installation is broken
