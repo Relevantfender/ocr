@@ -1,16 +1,7 @@
-# Core dependencies
-opencv-python>=4.8.0
-numpy>=1.24.0
-pillow>=10.0.0
-
-# OCR and text detection
-easyocr>=1.7.0
-pytesseract>=0.3.10
-
-# SAM (Segment Anything Model)
-segment-anything>=1.0
-torch>=2.0.0
-torchvision>=0.15.0
-
-# Utilities
-matplotlib>=3.7.0
+opencv-python
+numpy
+pillow
+easyocr
+pytesseract
+paddleocr
+paddlepaddle

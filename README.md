@@ -1,32 +1,27 @@
-# OCR Number Detection and Segmentation
+# OCR Comparison Tool
 
-A computer vision project that detects numbers (0-10), segments them using SAM (Segment Anything Model), and applies color fills to specific regions.
+Compare 3 OCR models (EasyOCR, Tesseract, PaddleOCR) for detecting numbers 0-10.
 
 ## Project Structure
 
 ```
 ocr/
-├── src/
-│   ├── detector.py          # Number detection (0-10 only)
-│   ├── segmenter.py         # SAM model integration
-│   ├── colorizer.py         # Flood fill with cv2
-│   └── pipeline.py          # Main pipeline
-├── tests/
-│   └── test_images/         # Sample images for testing
-├── requirements.txt
-└── README.md
+├── input/              # Put your images here
+├── output/
+│   ├── easyocr/       # EasyOCR results
+│   ├── tesseract/     # Tesseract results
+│   └── paddleocr/     # PaddleOCR results
+├── main.py
+└── requirements.txt
 ```
 
-## Components
+## Color Coding
 
-### 1. Number Detector
-Detects numbers 0-10 in images and returns their bounding box locations.
-
-### 2. SAM Segmenter
-Uses Segment Anything Model to segment detected number regions.
-
-### 3. Colorizer
-Applies flood fill algorithm to color segmented regions with specific hex colors.
+Numbers are color-coded with these regions:
+- Region 1: #D94E4E (warm muted red)
+- Region 2: #3A77C2 (deep denim blue)
+- Region 3: #E7C85A (soft golden yellow)
+- Region 4: #4FA36E (medium jade green)
 
 ## Installation
 
@@ -36,16 +31,11 @@ pip install -r requirements.txt
 
 ## Usage
 
-```python
-from src.pipeline import OCRPipeline
+1. Put your images in the `input/` folder
+2. Run: `python main.py`
+3. Check results in `output/easyocr/`, `output/tesseract/`, and `output/paddleocr/`
 
-pipeline = OCRPipeline()
-result = pipeline.process("path/to/image.jpg")
-```
-
-## Development Status
-
-- [ ] Number detection module
-- [ ] SAM segmentation module
-- [ ] Flood fill colorizer
-- [ ] Main pipeline integration
+Each output image shows:
+- Original image with bounding boxes
+- Color-coded numbers
+- Legend on the right side
