@@ -112,18 +112,27 @@ def flood_fill_numbers(image, detections, target_color_hex):
         masks_to_apply.append((mask_region, fill_color, num))
 
     # NOW apply all masks to create final image
-    print(f"    Applying {len(masks_to_apply)} masks to final image...")
-    filled_img = image.copy()
+    print(f"    Applying {len(masks_to_apply)} masks to fresh white canvas...")
 
+    # Step 3: Start with a pure white canvas
+    filled_img = np.ones((h, w, 3), dtype=np.uint8) * 255
+
+    # Step 4: Apply all colored masks
     pixels_changed = 0
     for mask_region, fill_color, num in masks_to_apply:
-        # Apply this color where mask is 255
         mask_pixels = np.sum(mask_region == 255)
         filled_img[mask_region == 255] = fill_color
         pixels_changed += mask_pixels
         print(f"      Applied color {fill_color} for number '{num}' ({mask_pixels} pixels)")
 
-    print(f"    ✓ Flood fill complete! Total pixels changed: {pixels_changed}")
+    # Step 5: Copy all black pixels from original to preserve boundaries
+    print("    Copying black boundaries from original...")
+    black_mask = np.all(image < 10, axis=2)  # Find black pixels in original
+    filled_img[black_mask] = [0, 0, 0]
+    black_pixels = np.sum(black_mask)
+    print(f"    Copied {black_pixels} black pixels from original")
+
+    print(f"    ✓ Flood fill complete! Total colored pixels: {pixels_changed}")
     return filled_img
 
 def create_side_by_side_output(original, filled, title="OCR Result"):
