@@ -87,20 +87,15 @@ def flood_fill_numbers(image, detections, target_color_hex):
                 break
 
         if seed_point:
-            # Perform flood fill
-            # Create mask for flood fill (needs to be h+2, w+2)
-            h, w = filled_img.shape[:2]
-            mask = np.zeros((h + 2, w + 2), np.uint8)
+            # Simple flood fill - fill the copied image at seed point
+            # Stops when it hits black or significantly different colors
+            lo_diff = (20, 20, 20)  # Lower bound color difference
+            up_diff = (20, 20, 20)  # Upper bound color difference
 
-            # FloodFill parameters
-            lo_diff = (15, 15, 15)  # Lower bound difference
-            up_diff = (15, 15, 15)  # Upper bound difference
-            flags = 4 | cv2.FLOODFILL_FIXED_RANGE  # Removed MASK_ONLY flag
+            # Just flood fill the image copy directly - no mask needed
+            cv2.floodFill(filled_img, None, seed_point, fill_color, lo_diff, up_diff)
 
-            # Perform flood fill directly on the image
-            cv2.floodFill(filled_img, mask, seed_point, fill_color, lo_diff, up_diff, flags)
-
-            print(f"      Number '{num}' filled with color {COLORS[color_key]} at {seed_point}")
+            print(f"      Number '{num}' filled with {COLORS[color_key]} at {seed_point}")
         else:
             print(f"      WARNING: Could not find seed point for number '{num}' in bbox")
 
