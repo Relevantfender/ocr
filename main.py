@@ -82,7 +82,7 @@ def extract_color(image, hex_color, tolerance=30):
 
     return mask
 
-def draw_bounding_boxes(image, detections, model_name):
+def draw_bounding_boxes(image, detections, model_name, preprocessed=None):
     """
     Draw bounding boxes on image with color-coded numbers and legend
 
@@ -90,6 +90,7 @@ def draw_bounding_boxes(image, detections, model_name):
         image: Original image
         detections: List of (number, bbox) tuples
         model_name: Name of the OCR model
+        preprocessed: Optional preprocessed/filtered image to show
 
     Returns:
         Image with bounding boxes and legend
@@ -97,10 +98,45 @@ def draw_bounding_boxes(image, detections, model_name):
     img = image.copy()
     h, w = img.shape[:2]
 
-    # Scale legend based on image size
-    legend_width = max(250, int(w * 0.15))
-    canvas = np.ones((h, w + legend_width, 3), dtype=np.uint8) * 255
-    canvas[:h, :w] = img
+    # If preprocessed image provided, show it alongside
+    if preprocessed is not None:
+        # Convert grayscale to BGR if needed
+        if len(preprocessed.shape) == 2:
+            preprocessed_bgr = cv2.cvtColor(preprocessed, cv2.COLOR_GRAY2BGR)
+        else:
+            preprocessed_bgr = preprocessed
+
+        # Resize preprocessed to match original height
+        prep_h, prep_w = preprocessed_bgr.shape[:2]
+        if prep_h != h:
+            scale = h / prep_h
+            new_w = int(prep_w * scale)
+            preprocessed_bgr = cv2.resize(preprocessed_bgr, (new_w, h))
+
+        prep_width = preprocessed_bgr.shape[1]
+
+        # Add label to preprocessed
+        label_img = preprocessed_bgr.copy()
+        cv2.putText(label_img, "Filtered", (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+
+        # Create canvas with space for: preprocessed + original + legend
+        legend_width = max(250, int(w * 0.15))
+        total_width = prep_width + w + legend_width
+        canvas = np.ones((h, total_width, 3), dtype=np.uint8) * 255
+        canvas[:h, :prep_width] = label_img
+        canvas[:h, prep_width:prep_width + w] = img
+
+        # Adjust offset for drawing bboxes and legend
+        bbox_offset = prep_width
+        legend_x = prep_width + w + 20
+    else:
+        # Scale legend based on image size
+        legend_width = max(250, int(w * 0.15))
+        canvas = np.ones((h, w + legend_width, 3), dtype=np.uint8) * 255
+        canvas[:h, :w] = img
+        bbox_offset = 0
+        legend_x = w + 20
 
     # Draw bounding boxes
     for number, bbox in detections:
@@ -116,13 +152,14 @@ def draw_bounding_boxes(image, detections, model_name):
                 if isinstance(bbox[0], (list, tuple)) and len(bbox[0]) == 2:
                     # Polygon format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
                     pts = np.array(bbox, dtype=np.int32)
+                    pts[:, 0] += bbox_offset  # Apply offset for x coordinates
                     cv2.polylines(canvas, [pts], True, color_bgr, 3)
-                    label_x, label_y = int(bbox[0][0]), int(bbox[0][1])
+                    label_x, label_y = int(bbox[0][0]) + bbox_offset, int(bbox[0][1])
                 else:
                     # Rectangle format: (x, y, w, h)
                     x, y, bw, bh = bbox
-                    cv2.rectangle(canvas, (x, y), (x + bw, y + bh), color_bgr, 3)
-                    label_x, label_y = x, y
+                    cv2.rectangle(canvas, (x + bbox_offset, y), (x + bbox_offset + bw, y + bh), color_bgr, 3)
+                    label_x, label_y = x + bbox_offset, y
 
                 # Draw number label
                 cv2.putText(canvas, str(number), (label_x, label_y - 10),
@@ -131,7 +168,6 @@ def draw_bounding_boxes(image, detections, model_name):
             print(f"    Warning: Failed to draw bbox for number {number}: {e}")
 
     # Draw legend with scaled fonts
-    legend_x = w + 20
     font_scale_title = max(0.8, h / 800)
     font_scale_text = max(0.6, h / 1000)
 
@@ -169,14 +205,11 @@ def draw_bounding_boxes(image, detections, model_name):
 def process_with_easyocr(image_path, reader):
     """Process image with EasyOCR"""
     img = cv2.imread(image_path)
+    preprocessed = None
 
     # Preprocess if color extraction is enabled
     if TARGET_NUMBER_COLOR:
         preprocessed = extract_color(img, TARGET_NUMBER_COLOR, COLOR_TOLERANCE)
-        # Save preprocessed image for debugging
-        debug_path = image_path.replace('input', 'output/preprocessed')
-        os.makedirs(os.path.dirname(debug_path), exist_ok=True)
-        cv2.imwrite(debug_path, preprocessed)
         results = reader.readtext(preprocessed)
     else:
         results = reader.readtext(image_path)
@@ -190,13 +223,14 @@ def process_with_easyocr(image_path, reader):
                 detections.append((num, bbox))
 
     print(f"    EasyOCR found {len(detections)} numbers")
-    output_img = draw_bounding_boxes(img, detections, "EasyOCR")
+    output_img = draw_bounding_boxes(img, detections, "EasyOCR", preprocessed)
     return output_img
 
 
 def process_with_paddleocr(image_path, ocr):
     """Process image with PaddleOCR"""
     img = cv2.imread(image_path)
+    preprocessed = None
 
     # Preprocess if color extraction is enabled
     if TARGET_NUMBER_COLOR:
@@ -225,7 +259,7 @@ def process_with_paddleocr(image_path, ocr):
                             detections.append((num, bbox))
 
     print(f"    PaddleOCR found {len(detections)} numbers")
-    output_img = draw_bounding_boxes(img, detections, "PaddleOCR")
+    output_img = draw_bounding_boxes(img, detections, "PaddleOCR", preprocessed)
     return output_img
 
 def main():
