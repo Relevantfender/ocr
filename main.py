@@ -16,6 +16,9 @@ from paddleocr import PaddleOCR
 # Set to None to disable color extraction (process original image)
 TARGET_NUMBER_COLOR = '#3A77C2'  # Blue - change this to match your numbers
 COLOR_TOLERANCE = 30  # HSV tolerance (higher = more colors matched)
+
+# GPU Settings (requires CUDA and GPU version of paddlepaddle/pytorch)
+USE_GPU = False  # Set to True to use GPU (much faster)
 # =========================
 
 # Color mapping for numbers (will be used later for floodFill)
@@ -247,9 +250,19 @@ def process_with_paddleocr(image_path, ocr):
 
     detections = []
 
+    # Debug what predict() returns
+    print(f"    DEBUG: results type = {type(results)}")
+    if results:
+        print(f"    DEBUG: results = {results}")
+        if isinstance(results, list):
+            print(f"    DEBUG: results is list, len = {len(results)}")
+            if len(results) > 0:
+                print(f"    DEBUG: results[0] type = {type(results[0])}")
+                print(f"    DEBUG: results[0] = {results[0]}")
+
     # PaddleOCR predict() returns a dictionary with keys: rec_texts, rec_polys, rec_scores
     if not results or not isinstance(results, dict):
-        print(f"    PaddleOCR: No results returned")
+        print(f"    PaddleOCR: No results returned (or not a dict)")
     elif 'rec_texts' not in results or not results['rec_texts']:
         print(f"    PaddleOCR: No text detected in image")
     else:
@@ -289,8 +302,9 @@ def main():
 
     # Initialize models
     print("Initializing OCR models...")
-    easy_reader = easyocr.Reader(['en'], gpu=False)
-    paddle_ocr = PaddleOCR(use_textline_orientation=False, lang='en')
+    print(f"GPU mode: {'ENABLED' if USE_GPU else 'DISABLED'}")
+    easy_reader = easyocr.Reader(['en'], gpu=USE_GPU)
+    paddle_ocr = PaddleOCR(use_textline_orientation=False, lang='en', use_gpu=USE_GPU)
     print("✓ Models loaded\n")
 
     # Process each image
