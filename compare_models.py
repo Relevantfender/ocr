@@ -4,6 +4,7 @@ Direct comparison: Draw both EasyOCR and PaddleOCR detections on the same image
 with different colors to see alignment differences.
 """
 
+import os
 import cv2
 import numpy as np
 from main import extract_color, TARGET_NUMBER_COLOR, COLOR_TOLERANCE
