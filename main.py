@@ -144,7 +144,7 @@ def process_with_easyocr(image_path, reader):
 def process_with_paddleocr(image_path, ocr):
     """Process image with PaddleOCR"""
     img = cv2.imread(image_path)
-    results = ocr.ocr(image_path, cls=False)
+    results = ocr.ocr(image_path)
 
     detections = []
     if results and results[0]:
@@ -184,7 +184,7 @@ def main():
     # Initialize models
     print("Initializing OCR models...")
     easy_reader = easyocr.Reader(['en'], gpu=False)
-    paddle_ocr = PaddleOCR(use_angle_cls=False, lang='en')
+    paddle_ocr = PaddleOCR(use_textline_orientation=False, lang='en')
     print("✓ Models loaded\n")
 
     # Process each image
