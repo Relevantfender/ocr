@@ -33,6 +33,112 @@ def hex_to_bgr(hex_color):
     rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
     return (rgb[2], rgb[1], rgb[0])  # Convert RGB to BGR
 
+def flood_fill_numbers(image, detections, target_color_hex):
+    """
+    Flood fill detected number regions with their corresponding colors
+
+    Args:
+        image: Original image (BGR)
+        detections: List of (number, bbox) tuples from OCR
+        target_color_hex: Hex color of the numbers to find (e.g., '#1a6db3')
+
+    Returns:
+        Image with flood-filled colored regions
+    """
+    # Create a copy for flood filling
+    filled_img = image.copy()
+
+    # Convert target color to BGR
+    target_bgr = hex_to_bgr(target_color_hex)
+
+    # Convert to HSV for better color matching
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    target_hsv = cv2.cvtColor(np.uint8([[target_bgr]]), cv2.COLOR_BGR2HSV)[0][0]
+
+    print(f"    Flood filling {len(detections)} detected numbers...")
+
+    for num, bbox in detections:
+        # Get fill color for this number (cycle through 6 colors)
+        color_key = ((num - 1) % 6) + 1
+        fill_color = hex_to_bgr(COLORS[color_key])
+
+        # Get bounding box coordinates
+        # bbox is [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+        pts = np.array(bbox, dtype=np.int32)
+
+        # Get bounding rectangle to search within
+        x_coords = [pt[0] for pt in pts]
+        y_coords = [pt[1] for pt in pts]
+        min_x, max_x = int(min(x_coords)), int(max(x_coords))
+        min_y, max_y = int(min(y_coords)), int(max(y_coords))
+
+        # Search for first pixel matching target color within bbox
+        seed_point = None
+        for y in range(min_y, max_y + 1):
+            for x in range(min_x, max_x + 1):
+                if 0 <= y < hsv.shape[0] and 0 <= x < hsv.shape[1]:
+                    pixel_hsv = hsv[y, x]
+                    # Check if pixel matches target color
+                    h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
+                    if h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50:
+                        seed_point = (x, y)
+                        break
+            if seed_point:
+                break
+
+        if seed_point:
+            # Perform flood fill
+            # Create mask for flood fill (needs to be h+2, w+2)
+            h, w = filled_img.shape[:2]
+            mask = np.zeros((h + 2, w + 2), np.uint8)
+
+            # FloodFill parameters
+            lo_diff = (10, 10, 10)  # Lower bound difference
+            up_diff = (10, 10, 10)  # Upper bound difference
+            flags = 4 | cv2.FLOODFILL_FIXED_RANGE | cv2.FLOODFILL_MASK_ONLY
+
+            # Fill the mask
+            cv2.floodFill(filled_img, mask, seed_point, fill_color, lo_diff, up_diff, flags)
+
+            # Apply the mask to fill the region
+            mask_crop = mask[1:-1, 1:-1]  # Remove the 1-pixel border
+            filled_img[mask_crop == 1] = fill_color
+
+            print(f"      Number '{num}' filled with color {COLORS[color_key]} at {seed_point}")
+        else:
+            print(f"      WARNING: Could not find seed point for number '{num}' in bbox")
+
+    return filled_img
+
+def create_side_by_side_output(original, filled, title="OCR Result"):
+    """
+    Create side-by-side comparison of original and flood-filled images
+
+    Args:
+        original: Original image
+        filled: Flood-filled image
+        title: Title for the output
+
+    Returns:
+        Side-by-side image
+    """
+    h, w = original.shape[:2]
+
+    # Create canvas for side-by-side display
+    canvas = np.zeros((h, w * 2, 3), dtype=np.uint8)
+
+    # Place images
+    canvas[:h, :w] = original
+    canvas[:h, w:] = filled
+
+    # Add labels
+    cv2.putText(canvas, "Original", (10, 30),
+               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+    cv2.putText(canvas, "Flood Filled", (w + 10, 30),
+               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+
+    return canvas
+
 def get_images_from_folder(folder='input'):
     """Load all images from input folder"""
     image_extensions = ['.jpg', '.jpeg', '.png', '.bmp']
@@ -260,7 +366,15 @@ def process_with_easyocr(image_path, reader):
                     detections.append((num, bbox))
 
     print(f"    EasyOCR found {len(detections)} numbers")
-    output_img = draw_bounding_boxes(img, detections, "EasyOCR", preprocessed)
+
+    # Flood fill the detected numbers with their colors
+    if TARGET_NUMBER_COLOR and len(detections) > 0:
+        filled_img = flood_fill_numbers(img, detections, TARGET_NUMBER_COLOR)
+        output_img = create_side_by_side_output(img, filled_img)
+    else:
+        # If no color extraction or no detections, just show original with bounding boxes
+        output_img = draw_bounding_boxes(img, detections, "EasyOCR", preprocessed)
+
     return output_img
 
 
