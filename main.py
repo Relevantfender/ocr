@@ -54,9 +54,20 @@ def flood_fill_numbers(image, detections, target_color_hex):
 
     print(f"    Creating flood fill masks for {len(detections)} numbers...")
 
+    # Step 1: Create work image - convert ALL blue pixels to white (do this once)
+    print("    Converting all blue pixels to white...")
+    work_img = image.copy()
+    for y in range(h):
+        for x in range(w):
+            pixel_hsv = hsv[y, x]
+            h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
+            if h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50:
+                work_img[y, x] = [255, 255, 255]
+
     # List to store (mask, color) tuples
     masks_to_apply = []
 
+    # Step 2: For each number, flood fill its connected white component
     for num, bbox in detections:
         # Get fill color for this number
         color_key = ((num - 1) % 6) + 1
@@ -69,13 +80,11 @@ def flood_fill_numbers(image, detections, target_color_hex):
         min_x, max_x = int(min(x_coords)), int(max(x_coords))
         min_y, max_y = int(min(y_coords)), int(max(y_coords))
 
-        # Find seed point (first blue pixel in bbox)
+        # Find seed point (first white pixel in bbox of work_img)
         seed_point = None
         for y in range(min_y, min(max_y + 1, h)):
             for x in range(min_x, min(max_x + 1, w)):
-                pixel_hsv = hsv[y, x]
-                h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
-                if h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50:
+                if work_img[y, x][0] > 200:  # Check if pixel is white
                     seed_point = (x, y)
                     print(f"      Number '{num}': Found seed at {seed_point}")
                     break
@@ -86,22 +95,14 @@ def flood_fill_numbers(image, detections, target_color_hex):
             print(f"      WARNING: No seed point found for number '{num}'")
             continue
 
-        # Step 1: Create a working copy and convert all blue pixels in bbox to white
-        work_img = image.copy()
-        for y in range(min_y, min(max_y + 1, h)):
-            for x in range(min_x, min(max_x + 1, w)):
-                pixel_hsv = hsv[y, x]
-                h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
-                if h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50:
-                    work_img[y, x] = [255, 255, 255]  # Convert blue to white
-
-        # Step 2: Now flood fill the white region - it will stop at black boundaries
+        # Flood fill this connected white component
         mask = np.zeros((h + 2, w + 2), np.uint8)
-        lo_diff = (10, 10, 10)  # Small tolerance - we're filling white, stopping at black
+        work_copy = work_img.copy()
+        lo_diff = (10, 10, 10)  # Small tolerance - fill connected white pixels
         up_diff = (10, 10, 10)
         flags = 4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8)
 
-        cv2.floodFill(work_img, mask, seed_point, (0, 0, 0), lo_diff, up_diff, flags)
+        cv2.floodFill(work_copy, mask, seed_point, (0, 0, 0), lo_diff, up_diff, flags)
         mask_region = mask[1:-1, 1:-1]
 
         filled_pixels = np.sum(mask_region == 255)
