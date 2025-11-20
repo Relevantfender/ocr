@@ -264,12 +264,26 @@ def process_with_paddleocr(image_path, ocr):
     # Preprocess if color extraction is enabled
     if TARGET_NUMBER_COLOR:
         preprocessed = extract_color(img, TARGET_NUMBER_COLOR, COLOR_TOLERANCE)
+
+        # DEBUG: Check dimensions
+        print(f"    DEBUG: Original shape: {img.shape}, Preprocessed shape: {preprocessed.shape}")
+
         # PaddleOCR needs BGR image, convert grayscale to BGR
         preprocessed_bgr = cv2.cvtColor(preprocessed, cv2.COLOR_GRAY2BGR)
+
+        # Verify BGR conversion didn't change dimensions
+        assert preprocessed_bgr.shape[:2] == img.shape[:2], "BGR conversion changed dimensions!"
+
         # Create temp path for preprocessed image
         temp_path = image_path.replace('input', 'output/preprocessed')
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
         cv2.imwrite(temp_path, preprocessed_bgr)
+
+        # Also save a debug image showing what we're sending to OCR
+        debug_path = temp_path.replace('.', '_debug.')
+        cv2.imwrite(debug_path, preprocessed)
+        print(f"    DEBUG: Saved preprocessed to {temp_path}")
+
         results = ocr.predict(temp_path)
     else:
         results = ocr.predict(image_path)
@@ -294,7 +308,9 @@ def process_with_paddleocr(image_path, ocr):
 
             for text, bbox, score in zip(rec_texts, rec_polys, rec_scores):
                 text = text.strip()
-                print(f"    PaddleOCR: Detected '{text}' with confidence {score:.2f}")
+                # Show first point of bbox for debugging alignment
+                first_pt = bbox[0] if hasattr(bbox, '__getitem__') else None
+                print(f"    PaddleOCR: Detected '{text}' at {first_pt} with confidence {score:.2f}")
                 if text.isdigit():
                     num = int(text)
                     if 0 <= num <= 10:
