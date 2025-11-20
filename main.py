@@ -11,6 +11,13 @@ import easyocr
 
 from paddleocr import PaddleOCR
 
+# ===== CONFIGURATION =====
+# Set the hex color of the numbers you want to extract
+# Set to None to disable color extraction (process original image)
+TARGET_NUMBER_COLOR = '#3A77C2'  # Blue - change this to match your numbers
+COLOR_TOLERANCE = 30  # HSV tolerance (higher = more colors matched)
+# =========================
+
 # Color mapping for numbers (will be used later for floodFill)
 COLORS = {
     1: '#D94E4E',  # warm muted red
@@ -38,6 +45,42 @@ def get_images_from_folder(folder='input'):
             images.append(os.path.join(folder, file))
 
     return images if images else None
+
+def extract_color(image, hex_color, tolerance=30):
+    """
+    Extract specific hex color from image and create clean binary mask
+
+    Args:
+        image: Input image (BGR)
+        hex_color: Hex color string (e.g., '#3A77C2')
+        tolerance: HSV tolerance for color matching (default: 30)
+
+    Returns:
+        Preprocessed image with white numbers on black background
+    """
+    # Convert hex to BGR
+    target_bgr = hex_to_bgr(hex_color)
+
+    # Convert to HSV for better color matching
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    target_hsv = cv2.cvtColor(np.uint8([[target_bgr]]), cv2.COLOR_BGR2HSV)[0][0]
+
+    # Create HSV range with tolerance
+    lower = np.array([max(0, target_hsv[0] - tolerance), 50, 50])
+    upper = np.array([min(179, target_hsv[0] + tolerance), 255, 255])
+
+    # Create mask for the specific color
+    mask = cv2.inRange(hsv, lower, upper)
+
+    # Clean up noise
+    kernel = np.ones((3, 3), np.uint8)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+
+    # Invert so numbers are white on black background (better for OCR)
+    mask = cv2.bitwise_not(mask)
+
+    return mask
 
 def draw_bounding_boxes(image, detections, model_name):
     """
@@ -126,7 +169,17 @@ def draw_bounding_boxes(image, detections, model_name):
 def process_with_easyocr(image_path, reader):
     """Process image with EasyOCR"""
     img = cv2.imread(image_path)
-    results = reader.readtext(image_path)
+
+    # Preprocess if color extraction is enabled
+    if TARGET_NUMBER_COLOR:
+        preprocessed = extract_color(img, TARGET_NUMBER_COLOR, COLOR_TOLERANCE)
+        # Save preprocessed image for debugging
+        debug_path = image_path.replace('input', 'output/preprocessed')
+        os.makedirs(os.path.dirname(debug_path), exist_ok=True)
+        cv2.imwrite(debug_path, preprocessed)
+        results = reader.readtext(preprocessed)
+    else:
+        results = reader.readtext(image_path)
 
     detections = []
     for bbox, text, conf in results:
@@ -144,7 +197,17 @@ def process_with_easyocr(image_path, reader):
 def process_with_paddleocr(image_path, ocr):
     """Process image with PaddleOCR"""
     img = cv2.imread(image_path)
-    results = ocr.ocr(image_path)
+
+    # Preprocess if color extraction is enabled
+    if TARGET_NUMBER_COLOR:
+        preprocessed = extract_color(img, TARGET_NUMBER_COLOR, COLOR_TOLERANCE)
+        # Create temp path for preprocessed image
+        temp_path = image_path.replace('input', 'output/preprocessed')
+        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        cv2.imwrite(temp_path, preprocessed)
+        results = ocr.ocr(temp_path)
+    else:
+        results = ocr.ocr(image_path)
 
     detections = []
     if results and results[0]:

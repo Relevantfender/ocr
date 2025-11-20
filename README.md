@@ -34,11 +34,26 @@ pip install -r requirements.txt
 - **Linux**: `sudo apt-get install tesseract-ocr`
 - **Mac**: `brew install tesseract`
 
+## Configuration
+
+Edit `main.py` to set the target number color:
+
+```python
+TARGET_NUMBER_COLOR = '#3A77C2'  # Hex color of numbers (e.g., blue)
+COLOR_TOLERANCE = 30              # HSV tolerance (higher = more colors)
+```
+
+Set `TARGET_NUMBER_COLOR = None` to disable color extraction.
+
 ## Usage
 
 1. Put your images in the `input/` folder
-2. Run: `python main.py`
-3. Check results in `output/easyocr/`, `output/tesseract/`, and `output/paddleocr/`
+2. Configure the hex color of your numbers in `main.py`
+3. Run: `python main.py`
+4. Check results in:
+   - `output/easyocr/` - EasyOCR results
+   - `output/paddleocr/` - PaddleOCR results
+   - `output/preprocessed/` - Extracted color masks (for debugging)
 
 Each output image shows:
 - Original image with bounding boxes
