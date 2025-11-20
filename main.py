@@ -144,17 +144,22 @@ def process_with_easyocr(image_path, reader):
 def process_with_paddleocr(image_path, ocr):
     """Process image with PaddleOCR"""
     img = cv2.imread(image_path)
-    results = ocr.predict(image_path)
+    results = ocr.ocr(image_path, cls=False)
 
     detections = []
     if results and results[0]:
         for line in results[0]:
-            bbox, (text, conf) = line
-            text = text.strip()
-            if text.isdigit():
-                num = int(text)
-                if 0 <= num <= 10:
-                    detections.append((num, bbox))
+            # PaddleOCR returns: [bbox, (text, confidence)]
+            if len(line) == 2:
+                bbox = line[0]
+                text_info = line[1]
+                if isinstance(text_info, (list, tuple)) and len(text_info) == 2:
+                    text, conf = text_info
+                    text = text.strip()
+                    if text.isdigit():
+                        num = int(text)
+                        if 0 <= num <= 10:
+                            detections.append((num, bbox))
 
     print(f"    PaddleOCR found {len(detections)} numbers")
     output_img = draw_bounding_boxes(img, detections, "PaddleOCR")
@@ -200,7 +205,7 @@ def main():
         # Process with PaddleOCR
         try:
             print("  Processing with PaddleOCR...")
-            result,_ = process_with_paddleocr(image_path, paddle_ocr)
+            result = process_with_paddleocr(image_path, paddle_ocr)
             cv2.imwrite(f'output/paddleocr/{filename}', result)
             print(f"  ✓ PaddleOCR -> output/paddleocr/{filename}")
         except Exception as e:
