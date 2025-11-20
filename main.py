@@ -250,35 +250,31 @@ def process_with_paddleocr(image_path, ocr):
 
     detections = []
 
-    # Debug what predict() returns
-    print(f"    DEBUG: results type = {type(results)}")
-    if results:
-        print(f"    DEBUG: results = {results}")
-        if isinstance(results, list):
-            print(f"    DEBUG: results is list, len = {len(results)}")
-            if len(results) > 0:
-                print(f"    DEBUG: results[0] type = {type(results[0])}")
-                print(f"    DEBUG: results[0] = {results[0]}")
-
-    # PaddleOCR predict() returns a dictionary with keys: rec_texts, rec_polys, rec_scores
-    if not results or not isinstance(results, dict):
-        print(f"    PaddleOCR: No results returned (or not a dict)")
-    elif 'rec_texts' not in results or not results['rec_texts']:
-        print(f"    PaddleOCR: No text detected in image")
+    # PaddleOCR predict() returns a list with one OCRResult object
+    if not results or not isinstance(results, list) or len(results) == 0:
+        print(f"    PaddleOCR: No results returned")
     else:
-        rec_texts = results['rec_texts']
-        rec_polys = results['rec_polys']
-        rec_scores = results['rec_scores']
+        result_obj = results[0]  # Get first (and only) result
 
-        print(f"    PaddleOCR: Found {len(rec_texts)} text regions")
+        # Access the OCRResult object's data
+        if 'rec_texts' not in result_obj or not result_obj['rec_texts']:
+            print(f"    PaddleOCR: No text detected in image")
+        else:
+            rec_texts = result_obj['rec_texts']
+            rec_polys = result_obj['rec_polys']
+            rec_scores = result_obj['rec_scores']
 
-        for idx, (text, bbox, score) in enumerate(zip(rec_texts, rec_polys, rec_scores)):
-            text = text.strip()
-            print(f"    PaddleOCR: Detected '{text}' with confidence {score:.2f}")
-            if text.isdigit():
-                num = int(text)
-                if 0 <= num <= 10:
-                    detections.append((num, bbox))
+            print(f"    PaddleOCR: Found {len(rec_texts)} text regions")
+
+            for text, bbox, score in zip(rec_texts, rec_polys, rec_scores):
+                text = text.strip()
+                print(f"    PaddleOCR: Detected '{text}' with confidence {score:.2f}")
+                if text.isdigit():
+                    num = int(text)
+                    if 0 <= num <= 10:
+                        # Convert numpy array to list for consistency
+                        bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else bbox
+                        detections.append((num, bbox_list))
 
     print(f"    PaddleOCR found {len(detections)} valid numbers (0-10)")
     output_img = draw_bounding_boxes(img, detections, "PaddleOCR", preprocessed)
