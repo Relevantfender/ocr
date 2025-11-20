@@ -245,6 +245,15 @@ def process_with_easyocr(image_path, reader):
         # Test both polarities: black-on-white (current) and white-on-black (inverted)
         inverted = cv2.bitwise_not(preprocessed)
 
+        # Save both versions for visual comparison
+        base_path = image_path.replace('input', 'output/preprocessed')
+        os.makedirs(os.path.dirname(base_path), exist_ok=True)
+        normal_path = base_path.replace('.', '_normal.')
+        inverted_path = base_path.replace('.', '_inverted.')
+        cv2.imwrite(normal_path, preprocessed)
+        cv2.imwrite(inverted_path, inverted)
+        print(f"    Saved: {os.path.basename(normal_path)} and {os.path.basename(inverted_path)}")
+
         print(f"    Testing EasyOCR with both polarities...")
 
         # Test 1: Black text on white background (current)
@@ -277,6 +286,11 @@ def process_with_easyocr(image_path, reader):
             best_polarity = "normal (black-on-white)"
 
         print(f"    EasyOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)} → Using {best_polarity}")
+
+        # Debug bbox format
+        if best_detections:
+            sample_bbox = best_detections[0][1]
+            print(f"    EasyOCR bbox format: {sample_bbox}")
 
     else:
         results = reader.readtext(image_path)
@@ -336,6 +350,15 @@ def process_with_paddleocr(image_path, ocr):
 
         # Test both polarities
         inverted = cv2.bitwise_not(preprocessed)
+
+        # Save both versions for visual comparison (same as EasyOCR)
+        base_path = image_path.replace('input', 'output/preprocessed')
+        os.makedirs(os.path.dirname(base_path), exist_ok=True)
+        normal_path = base_path.replace('.', '_paddle_normal.')
+        inverted_path = base_path.replace('.', '_paddle_inverted.')
+        cv2.imwrite(normal_path, preprocessed)
+        cv2.imwrite(inverted_path, inverted)
+
         print(f"    Testing PaddleOCR with both polarities...")
 
         # Test 1: Black text on white background (normal)
@@ -355,21 +378,11 @@ def process_with_paddleocr(image_path, ocr):
 
         print(f"    PaddleOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)} → Using {best_polarity}")
 
-        # Save the best preprocessed version for inspection
-        temp_path = image_path.replace('input', 'output/preprocessed')
-        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-        preprocessed_bgr = cv2.cvtColor(preprocessed, cv2.COLOR_GRAY2BGR)
-        cv2.imwrite(temp_path, preprocessed_bgr)
-        print(f"    DEBUG: Saved best polarity ({best_polarity}) to {temp_path}")
-
-        # Show details of detections
+        # Debug bbox format
         if best_detections:
+            sample_bbox = best_detections[0][1]
+            print(f"    PaddleOCR bbox format: {sample_bbox}")
             print(f"    PaddleOCR: Found {len(best_detections)} valid numbers (0-10)")
-            for num, bbox in best_detections[:5]:  # Show first 5
-                first_pt = bbox[0] if bbox else None
-                print(f"    ✓ '{num}' at {first_pt}")
-            if len(best_detections) > 5:
-                print(f"    ... and {len(best_detections) - 5} more")
     else:
         results = ocr.predict(image_path)
         # Process without preprocessing
