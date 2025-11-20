@@ -78,6 +78,7 @@ def flood_fill_numbers(image, detections, target_color_hex):
                 h_diff = abs(int(pixel_hsv[0]) - int(target_hsv[0]))
                 if h_diff < 15 and pixel_hsv[1] > 50 and pixel_hsv[2] > 50:
                     seed_point = (x, y)
+                    seed_pixel = pixel_bgr
                     print(f"      Number '{num}': Found seed at {seed_point}, pixel BGR: {pixel_bgr}, HSV: {pixel_hsv}")
                     break
             if seed_point:
@@ -90,11 +91,11 @@ def flood_fill_numbers(image, detections, target_color_hex):
         # Create mask for this region (h+2, w+2 as required by OpenCV)
         mask = np.zeros((h + 2, w + 2), np.uint8)
 
-        # Flood fill the mask - fill the number region until hitting black background
-        # lo_diff: tolerance going darker - should stop before reaching black (0,0,0)
-        # up_diff: tolerance going brighter - can go to white
-        lo_diff = (150, 150, 150)  # Stop before reaching pure black
-        up_diff = (250, 250, 250)  # Fill up to white
+        # Flood fill - set lo_diff based on seed brightness to stop just before black
+        # Fill down to brightness of 10, stopping before pure black (0,0,0)
+        min_brightness = int(min(seed_pixel))
+        lo_diff = (min_brightness - 10, min_brightness - 10, min_brightness - 10)
+        up_diff = (255, 255, 255)  # Fill all the way to white
         flags = 4 | cv2.FLOODFILL_MASK_ONLY | (255 << 8)  # Fill mask with 255
 
         # Fill mask (using a temp copy of image)
