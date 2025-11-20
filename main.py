@@ -1,23 +1,19 @@
 """
-Simple OCR comparison tool for numbers 0-10
-Compares EasyOCR, Tesseract, and PaddleOCR
+Simple OCR tool for numbers 0-10 using EasyOCR
+Extracts specific color, inverts to white-on-black for best results
 """
 
 import cv2
 import numpy as np
 import os
-
 import easyocr
-
-from paddleocr import PaddleOCR
 
 # ===== CONFIGURATION =====
 # Set the hex color of the numbers you want to extract
-# Set to None to disable color extraction (process original image)
 TARGET_NUMBER_COLOR = '#1a6db3'  # Blue - change this to match your numbers
 COLOR_TOLERANCE = 30  # HSV tolerance (higher = more colors matched)
 
-# GPU Settings (requires CUDA and GPU version of paddlepaddle/pytorch)
+# GPU Settings (requires CUDA and GPU version of pytorch)
 USE_GPU = False  # Set to True to use GPU (much faster)
 # =========================
 
@@ -232,221 +228,46 @@ def draw_bounding_boxes(image, detections, model_name, preprocessed=None):
     return canvas
 
 def process_with_easyocr(image_path, reader):
-    """Process image with EasyOCR - tests both polarities"""
+    """Process image with EasyOCR using inverted polarity (white-on-black)"""
     img = cv2.imread(image_path)
     preprocessed = None
-    best_detections = []
-    best_polarity = "original"
+    detections = []
 
     # Preprocess if color extraction is enabled
     if TARGET_NUMBER_COLOR:
+        # Extract color
         preprocessed = extract_color(img, TARGET_NUMBER_COLOR, COLOR_TOLERANCE)
 
-        # Test both polarities: black-on-white (current) and white-on-black (inverted)
-        inverted = cv2.bitwise_not(preprocessed)
+        # Invert to white-on-black (works best for EasyOCR)
+        preprocessed = cv2.bitwise_not(preprocessed)
 
-        # Save both versions for visual comparison
-        base_path = image_path.replace('input', 'output/preprocessed')
-        os.makedirs(os.path.dirname(base_path), exist_ok=True)
-
-        # Use proper extension splitting to avoid naming conflicts
-        name, ext = os.path.splitext(base_path)
-        normal_path = f"{name}_easyocr_normal{ext}"
-        inverted_path = f"{name}_easyocr_inverted{ext}"
-
-        try:
-            cv2.imwrite(normal_path, preprocessed)
-            cv2.imwrite(inverted_path, inverted)
-            print(f"    Saved EasyOCR preprocessed: {os.path.basename(normal_path)} and {os.path.basename(inverted_path)}")
-            print(f"    Full path: {os.path.dirname(normal_path)}/")
-        except Exception as e:
-            print(f"    ERROR saving preprocessed images: {e}")
-
-        print(f"    Testing EasyOCR with both polarities...")
-
-        # Test 1: Black text on white background (current)
-        results_normal = reader.readtext(preprocessed)
-        detections_normal = []
-        for bbox, text, conf in results_normal:
+        # Process with EasyOCR
+        results = reader.readtext(preprocessed)
+        for bbox, text, conf in results:
             text = text.strip()
             if text.isdigit():
                 num = int(text)
                 if 0 <= num <= 10:
-                    detections_normal.append((num, bbox))
-
-        # Test 2: White text on black background (inverted)
-        results_inverted = reader.readtext(inverted)
-        detections_inverted = []
-        for bbox, text, conf in results_inverted:
-            text = text.strip()
-            if text.isdigit():
-                num = int(text)
-                if 0 <= num <= 10:
-                    detections_inverted.append((num, bbox))
-
-        print(f"    EasyOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)}")
-
-        # Debug: Show sample EasyOCR bbox format
-        if detections_normal:
-            sample_num, sample_bbox = detections_normal[0]
-            print(f"    EasyOCR sample bbox: Number '{sample_num}' at {sample_bbox}")
-            print(f"    EasyOCR bbox type: {type(sample_bbox)}, point 0: {sample_bbox[0]}")
-            # Calculate bbox center for comparison
-            if len(sample_bbox) == 4:
-                center_x = sum(pt[0] for pt in sample_bbox) / 4
-                center_y = sum(pt[1] for pt in sample_bbox) / 4
-                print(f"    EasyOCR bbox center: ({center_x:.1f}, {center_y:.1f})")
-
-        # Output BOTH versions so user can compare
-        output_normal = draw_bounding_boxes(img, detections_normal, "EasyOCR-Normal", preprocessed)
-        output_inverted = draw_bounding_boxes(img, detections_inverted, "EasyOCR-Inverted", inverted)
-
-        return [output_normal, output_inverted]
-
+                    detections.append((num, bbox))
     else:
+        # No color extraction, process original
         results = reader.readtext(image_path)
         for bbox, text, conf in results:
             text = text.strip()
             if text.isdigit():
                 num = int(text)
                 if 0 <= num <= 10:
-                    best_detections.append((num, bbox))
+                    detections.append((num, bbox))
 
-        print(f"    EasyOCR found {len(best_detections)} numbers")
-        output_img = draw_bounding_boxes(img, best_detections, "EasyOCR", None)
-        return [output_img]
+    print(f"    EasyOCR found {len(detections)} numbers")
+    output_img = draw_bounding_boxes(img, detections, "EasyOCR", preprocessed)
+    return output_img
 
-
-def process_with_paddleocr(image_path, ocr):
-    """Process image with PaddleOCR - tests both polarities"""
-    img = cv2.imread(image_path)
-    preprocessed = None
-    best_detections = []
-    best_polarity = "original"
-
-    def process_polarity(preprocessed_gray, polarity_name):
-        """Helper function to process one polarity"""
-        # PaddleOCR needs BGR image
-        preprocessed_bgr = cv2.cvtColor(preprocessed_gray, cv2.COLOR_GRAY2BGR)
-        assert preprocessed_bgr.shape[:2] == img.shape[:2], "BGR conversion changed dimensions!"
-
-        print(f"      DEBUG: Sending to PaddleOCR - shape: {preprocessed_bgr.shape}, dtype: {preprocessed_bgr.dtype}")
-
-        # CRITICAL FIX: Save to temp file and pass path instead of array
-        # PaddleOCR's predict() with numpy array might have coordinate bugs
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
-            temp_path = tmp.name
-            cv2.imwrite(temp_path, preprocessed_bgr)
-
-        try:
-            results = ocr.predict(temp_path)
-        finally:
-            import os
-            os.unlink(temp_path)  # Clean up temp file
-
-        detections = []
-
-        if not results or not isinstance(results, list) or len(results) == 0:
-            return detections
-
-        result_obj = results[0]
-        if 'rec_texts' not in result_obj or not result_obj['rec_texts']:
-            return detections
-
-        rec_texts = result_obj['rec_texts']
-        rec_polys = result_obj['rec_polys']
-        rec_scores = result_obj['rec_scores']
-
-        for text, bbox, score in zip(rec_texts, rec_polys, rec_scores):
-            text = text.strip()
-            if text.isdigit():
-                num = int(text)
-                if 0 <= num <= 10:
-                    bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else bbox
-                    detections.append((num, bbox_list))
-
-        # Debug first detection
-        if detections:
-            print(f"      DEBUG: First detection in {polarity_name} - Number '{detections[0][0]}' bbox: {detections[0][1]}")
-
-        return detections
-
-    # Preprocess if color extraction is enabled
-    if TARGET_NUMBER_COLOR:
-        preprocessed = extract_color(img, TARGET_NUMBER_COLOR, COLOR_TOLERANCE)
-        print(f"    DEBUG: Original shape: {img.shape}, Preprocessed shape: {preprocessed.shape}")
-
-        # Test both polarities
-        inverted = cv2.bitwise_not(preprocessed)
-
-        # Save both versions for visual comparison (same as EasyOCR)
-        base_path = image_path.replace('input', 'output/preprocessed')
-        os.makedirs(os.path.dirname(base_path), exist_ok=True)
-
-        # Use proper extension splitting to avoid naming conflicts
-        name, ext = os.path.splitext(base_path)
-        normal_path = f"{name}_paddleocr_normal{ext}"
-        inverted_path = f"{name}_paddleocr_inverted{ext}"
-
-        try:
-            cv2.imwrite(normal_path, preprocessed)
-            cv2.imwrite(inverted_path, inverted)
-            print(f"    Saved PaddleOCR preprocessed: {os.path.basename(normal_path)} and {os.path.basename(inverted_path)}")
-            print(f"    Full path: {os.path.dirname(normal_path)}/")
-        except Exception as e:
-            print(f"    ERROR saving preprocessed images: {e}")
-
-        print(f"    Testing PaddleOCR with both polarities...")
-
-        # Test 1: Black text on white background (normal)
-        detections_normal = process_polarity(preprocessed, "normal")
-
-        # Test 2: White text on black background (inverted)
-        detections_inverted = process_polarity(inverted, "inverted")
-
-        print(f"    PaddleOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)}")
-
-        # Debug: Show sample PaddleOCR bbox format
-        if detections_normal:
-            sample_num, sample_bbox = detections_normal[0]
-            print(f"    PaddleOCR sample bbox: Number '{sample_num}' at {sample_bbox}")
-            print(f"    PaddleOCR bbox type: {type(sample_bbox)}, point 0: {sample_bbox[0]}")
-            # Calculate bbox center for comparison
-            if len(sample_bbox) == 4:
-                center_x = sum(pt[0] for pt in sample_bbox) / 4
-                center_y = sum(pt[1] for pt in sample_bbox) / 4
-                print(f"    PaddleOCR bbox center: ({center_x:.1f}, {center_y:.1f})")
-
-        # Output BOTH versions so user can compare
-        output_normal = draw_bounding_boxes(img, detections_normal, "PaddleOCR-Normal", preprocessed)
-        output_inverted = draw_bounding_boxes(img, detections_inverted, "PaddleOCR-Inverted", inverted)
-
-        return [output_normal, output_inverted]
-
-    else:
-        results = ocr.predict(image_path)
-        # Process without preprocessing
-        if results and isinstance(results, list) and len(results) > 0:
-            result_obj = results[0]
-            if 'rec_texts' in result_obj and result_obj['rec_texts']:
-                rec_texts = result_obj['rec_texts']
-                rec_polys = result_obj['rec_polys']
-                for text, bbox in zip(rec_texts, rec_polys):
-                    text = text.strip()
-                    if text.isdigit():
-                        num = int(text)
-                        if 0 <= num <= 10:
-                            bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else bbox
-                            best_detections.append((num, bbox_list))
-
-        output_img = draw_bounding_boxes(img, best_detections, "PaddleOCR", None)
-        return [output_img]
 
 def main():
     """Main processing loop"""
     print("=" * 60)
-    print("OCR Comparison Tool - Numbers 0-10")
+    print("OCR Tool - Numbers 0-10 (EasyOCR)")
     print("=" * 60)
 
     # Check for images
@@ -459,29 +280,21 @@ def main():
 
     print(f"\n✓ Found {len(images)} images to process\n")
 
-    # Initialize models
-    print("Initializing OCR models...")
+    # Initialize EasyOCR
+    print("Initializing EasyOCR...")
     print(f"GPU mode: {'ENABLED' if USE_GPU else 'DISABLED'}")
 
     if USE_GPU:
-        print("Note: GPU requires proper CUDA setup. See GPU_SETUP.md if you get errors.")
+        print("Note: GPU requires proper CUDA setup (PyTorch with CUDA).")
 
     try:
         easy_reader = easyocr.Reader(['en'], gpu=USE_GPU)
-        # Lower detection thresholds to find more numbers
-        paddle_ocr = PaddleOCR(
-            use_textline_orientation=False,
-            lang='en',
-            det_db_thresh=0.2,  # Lower threshold for text detection (default: 0.3)
-            det_db_box_thresh=0.4,  # Lower threshold for bounding boxes (default: 0.6)
-            rec_batch_num=6  # Process more images in batch
-        )
-        print("✓ Models loaded\n")
+        print("✓ EasyOCR loaded\n")
     except Exception as e:
-        print(f"\n❌ Error loading models: {e}")
+        print(f"\n❌ Error loading EasyOCR: {e}")
         print("\nIf GPU is enabled and failing:")
-        print("1. Check GPU_SETUP.md for installation instructions")
-        print("2. Or set USE_GPU = False in main.py to use CPU\n")
+        print("  Install PyTorch with CUDA support")
+        print("  Or set USE_GPU = False in main.py to use CPU\n")
         return
 
     # Process each image
@@ -491,36 +304,11 @@ def main():
 
         # Process with EasyOCR
         try:
-            print("  Processing with EasyOCR...")
-            results = process_with_easyocr(image_path, easy_reader)
-            # results is a list of images (normal and inverted, or just one)
-            if len(results) == 2:
-                name, ext = os.path.splitext(filename)
-                cv2.imwrite(f'output/easyocr/{name}_normal{ext}', results[0])
-                cv2.imwrite(f'output/easyocr/{name}_inverted{ext}', results[1])
-                print(f"  ✓ EasyOCR -> output/easyocr/{name}_normal{ext} and {name}_inverted{ext}")
-            else:
-                cv2.imwrite(f'output/easyocr/{filename}', results[0])
-                print(f"  ✓ EasyOCR -> output/easyocr/{filename}")
+            result = process_with_easyocr(image_path, easy_reader)
+            cv2.imwrite(f'output/easyocr/{filename}', result)
+            print(f"  ✓ EasyOCR -> output/easyocr/{filename}")
         except Exception as e:
             print(f"  ❌ EasyOCR error: {e}")
-
-
-        # Process with PaddleOCR
-        try:
-            print("  Processing with PaddleOCR...")
-            results = process_with_paddleocr(image_path, paddle_ocr)
-            # results is a list of images (normal and inverted, or just one)
-            if len(results) == 2:
-                name, ext = os.path.splitext(filename)
-                cv2.imwrite(f'output/paddleocr/{name}_normal{ext}', results[0])
-                cv2.imwrite(f'output/paddleocr/{name}_inverted{ext}', results[1])
-                print(f"  ✓ PaddleOCR -> output/paddleocr/{name}_normal{ext} and {name}_inverted{ext}")
-            else:
-                cv2.imwrite(f'output/paddleocr/{filename}', results[0])
-                print(f"  ✓ PaddleOCR -> output/paddleocr/{filename}")
-        except Exception as e:
-            print(f"  ❌ PaddleOCR error: {e}")
 
     print("\n" + "=" * 60)
     print("Processing complete!")
