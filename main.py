@@ -6,9 +6,9 @@ Compares EasyOCR, Tesseract, and PaddleOCR
 import cv2
 import numpy as np
 import os
-from pathlib import Path
+
 import easyocr
-import pytesseract
+
 from paddleocr import PaddleOCR
 
 # Color mapping for numbers (will be used later for floodFill)
@@ -140,29 +140,11 @@ def process_with_easyocr(image_path, reader):
     output_img = draw_bounding_boxes(img, detections, "EasyOCR")
     return output_img
 
-def process_with_tesseract(image_path):
-    """Process image with Tesseract"""
-    img = cv2.imread(image_path)
-
-    # Use Tesseract to get bounding boxes
-    data = pytesseract.image_to_data(img, config='--psm 6 digits', output_type=pytesseract.Output.DICT)
-
-    detections = []
-    for i, text in enumerate(data['text']):
-        if text.strip().isdigit():
-            num = int(text.strip())
-            if 0 <= num <= 10:
-                x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
-                detections.append((num, (x, y, w, h)))
-
-    print(f"    Tesseract found {len(detections)} numbers")
-    output_img = draw_bounding_boxes(img, detections, "Tesseract")
-    return output_img
 
 def process_with_paddleocr(image_path, ocr):
     """Process image with PaddleOCR"""
     img = cv2.imread(image_path)
-    results = ocr.ocr(image_path, cls=False)
+    results = ocr.predict(image_path)
 
     detections = []
     if results and results[0]:
@@ -214,19 +196,11 @@ def main():
         except Exception as e:
             print(f"  ❌ EasyOCR error: {e}")
 
-        # Process with Tesseract
-        try:
-            print("  Processing with Tesseract...")
-            result = process_with_tesseract(image_path)
-            cv2.imwrite(f'output/tesseract/{filename}', result)
-            print(f"  ✓ Tesseract -> output/tesseract/{filename}")
-        except Exception as e:
-            print(f"  ❌ Tesseract error: {e}")
 
         # Process with PaddleOCR
         try:
             print("  Processing with PaddleOCR...")
-            result = process_with_paddleocr(image_path, paddle_ocr)
+            result,_ = process_with_paddleocr(image_path, paddle_ocr)
             cv2.imwrite(f'output/paddleocr/{filename}', result)
             print(f"  ✓ PaddleOCR -> output/paddleocr/{filename}")
         except Exception as e:
