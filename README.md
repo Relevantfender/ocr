@@ -29,6 +29,11 @@ Numbers are color-coded with these regions:
 pip install -r requirements.txt
 ```
 
+**Note**: Tesseract requires a system binary installation:
+- **Windows**: Download from https://github.com/UB-Mannheim/tesseract/wiki
+- **Linux**: `sudo apt-get install tesseract-ocr`
+- **Mac**: `brew install tesseract`
+
 ## Usage
 
 1. Put your images in the `input/` folder

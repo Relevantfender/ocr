@@ -54,8 +54,8 @@ def draw_bounding_boxes(image, detections, model_name):
     img = image.copy()
     h, w = img.shape[:2]
 
-    # Add space on the right for legend
-    legend_width = 200
+    # Scale legend based on image size
+    legend_width = max(250, int(w * 0.15))
     canvas = np.ones((h, w + legend_width, 3), dtype=np.uint8) * 255
     canvas[:h, :w] = img
 
@@ -66,43 +66,60 @@ def draw_bounding_boxes(image, detections, model_name):
         color_hex = COLORS[color_key]
         color_bgr = hex_to_bgr(color_hex)
 
-        # Draw bounding box
-        if len(bbox) == 4 and len(bbox[0]) == 2:  # Polygon format
-            pts = np.array(bbox, dtype=np.int32)
-            cv2.polylines(canvas, [pts], True, color_bgr, 2)
-        else:  # Rectangle format (x, y, w, h)
-            x, y, bw, bh = bbox
-            cv2.rectangle(canvas, (x, y), (x + bw, y + bh), color_bgr, 2)
+        # Draw bounding box - handle different formats
+        try:
+            if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+                # Check if it's polygon format (list of points)
+                if isinstance(bbox[0], (list, tuple)) and len(bbox[0]) == 2:
+                    # Polygon format: [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+                    pts = np.array(bbox, dtype=np.int32)
+                    cv2.polylines(canvas, [pts], True, color_bgr, 3)
+                    label_x, label_y = int(bbox[0][0]), int(bbox[0][1])
+                else:
+                    # Rectangle format: (x, y, w, h)
+                    x, y, bw, bh = bbox
+                    cv2.rectangle(canvas, (x, y), (x + bw, y + bh), color_bgr, 3)
+                    label_x, label_y = x, y
 
-        # Draw number label
-        label_pos = bbox[0] if len(bbox) == 4 else (bbox[0], bbox[1])
-        cv2.putText(canvas, str(number), (int(label_pos[0]), int(label_pos[1]) - 5),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, color_bgr, 2)
+                # Draw number label
+                cv2.putText(canvas, str(number), (label_x, label_y - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 1.2, color_bgr, 3)
+        except Exception as e:
+            print(f"    Warning: Failed to draw bbox for number {number}: {e}")
 
-    # Draw legend
-    legend_x = w + 10
-    cv2.putText(canvas, "Legend", (legend_x, 30),
-               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
+    # Draw legend with scaled fonts
+    legend_x = w + 20
+    font_scale_title = max(0.8, h / 800)
+    font_scale_text = max(0.6, h / 1000)
 
-    y_offset = 60
+    cv2.putText(canvas, "Legend", (legend_x, 50),
+               cv2.FONT_HERSHEY_SIMPLEX, font_scale_title, (0, 0, 0), 2)
+
+    y_offset = 100
+    box_size = max(40, int(h * 0.04))
+    spacing = max(60, int(h * 0.06))
+
     for region_num, hex_color in COLORS.items():
         color_bgr = hex_to_bgr(hex_color)
 
         # Draw color box
-        cv2.rectangle(canvas, (legend_x, y_offset), (legend_x + 30, y_offset + 30),
+        cv2.rectangle(canvas, (legend_x, y_offset),
+                     (legend_x + box_size, y_offset + box_size),
                      color_bgr, -1)
-        cv2.rectangle(canvas, (legend_x, y_offset), (legend_x + 30, y_offset + 30),
-                     (0, 0, 0), 1)
+        cv2.rectangle(canvas, (legend_x, y_offset),
+                     (legend_x + box_size, y_offset + box_size),
+                     (0, 0, 0), 2)
 
         # Draw text
-        cv2.putText(canvas, f"Region {region_num}", (legend_x + 40, y_offset + 20),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 0), 1)
+        cv2.putText(canvas, f"Region {region_num}",
+                   (legend_x + box_size + 15, y_offset + box_size // 2 + 5),
+                   cv2.FONT_HERSHEY_SIMPLEX, font_scale_text, (0, 0, 0), 2)
 
-        y_offset += 40
+        y_offset += spacing
 
     # Add model name at bottom
-    cv2.putText(canvas, f"Model: {model_name}", (legend_x, h - 20),
-               cv2.FONT_HERSHEY_SIMPLEX, 0.4, (100, 100, 100), 1)
+    cv2.putText(canvas, f"Model: {model_name}", (legend_x, h - 30),
+               cv2.FONT_HERSHEY_SIMPLEX, font_scale_text, (100, 100, 100), 2)
 
     return canvas
 
@@ -119,6 +136,7 @@ def process_with_easyocr(image_path, reader):
             if 0 <= num <= 10:
                 detections.append((num, bbox))
 
+    print(f"    EasyOCR found {len(detections)} numbers")
     output_img = draw_bounding_boxes(img, detections, "EasyOCR")
     return output_img
 
@@ -137,6 +155,7 @@ def process_with_tesseract(image_path):
                 x, y, w, h = data['left'][i], data['top'][i], data['width'][i], data['height'][i]
                 detections.append((num, (x, y, w, h)))
 
+    print(f"    Tesseract found {len(detections)} numbers")
     output_img = draw_bounding_boxes(img, detections, "Tesseract")
     return output_img
 
@@ -155,6 +174,7 @@ def process_with_paddleocr(image_path, ocr):
                 if 0 <= num <= 10:
                     detections.append((num, bbox))
 
+    print(f"    PaddleOCR found {len(detections)} numbers")
     output_img = draw_bounding_boxes(img, detections, "PaddleOCR")
     return output_img
 
@@ -183,27 +203,34 @@ def main():
     # Process each image
     for idx, image_path in enumerate(images, 1):
         filename = os.path.basename(image_path)
-        print(f"[{idx}/{len(images)}] Processing: {filename}")
+        print(f"\n[{idx}/{len(images)}] Processing: {filename}")
 
-        # Process with each model
+        # Process with EasyOCR
         try:
-            # EasyOCR
+            print("  Processing with EasyOCR...")
             result = process_with_easyocr(image_path, easy_reader)
             cv2.imwrite(f'output/easyocr/{filename}', result)
             print(f"  ✓ EasyOCR -> output/easyocr/{filename}")
+        except Exception as e:
+            print(f"  ❌ EasyOCR error: {e}")
 
-            # Tesseract
+        # Process with Tesseract
+        try:
+            print("  Processing with Tesseract...")
             result = process_with_tesseract(image_path)
             cv2.imwrite(f'output/tesseract/{filename}', result)
             print(f"  ✓ Tesseract -> output/tesseract/{filename}")
+        except Exception as e:
+            print(f"  ❌ Tesseract error: {e}")
 
-            # PaddleOCR
+        # Process with PaddleOCR
+        try:
+            print("  Processing with PaddleOCR...")
             result = process_with_paddleocr(image_path, paddle_ocr)
             cv2.imwrite(f'output/paddleocr/{filename}', result)
             print(f"  ✓ PaddleOCR -> output/paddleocr/{filename}")
-
         except Exception as e:
-            print(f"  ❌ Error processing {filename}: {e}")
+            print(f"  ❌ PaddleOCR error: {e}")
 
     print("\n" + "=" * 60)
     print("Processing complete!")
