@@ -274,17 +274,18 @@ def process_with_paddleocr(image_path, ocr):
         # Verify BGR conversion didn't change dimensions
         assert preprocessed_bgr.shape[:2] == img.shape[:2], "BGR conversion changed dimensions!"
 
-        # Create temp path for preprocessed image
+        # Save debug images for inspection
         temp_path = image_path.replace('input', 'output/preprocessed')
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
         cv2.imwrite(temp_path, preprocessed_bgr)
-
-        # Also save a debug image showing what we're sending to OCR
         debug_path = temp_path.replace('.', '_debug.')
         cv2.imwrite(debug_path, preprocessed)
         print(f"    DEBUG: Saved preprocessed to {temp_path}")
 
-        results = ocr.predict(temp_path)
+        # Pass image array directly to PaddleOCR instead of file path
+        # This avoids any potential issues with file I/O or reloading
+        print(f"    DEBUG: Passing image array of shape {preprocessed_bgr.shape} directly to PaddleOCR")
+        results = ocr.predict(preprocessed_bgr)
     else:
         results = ocr.predict(image_path)
 
@@ -304,19 +305,33 @@ def process_with_paddleocr(image_path, ocr):
             rec_polys = result_obj['rec_polys']
             rec_scores = result_obj['rec_scores']
 
-            print(f"    PaddleOCR: Found {len(rec_texts)} text regions")
+            print(f"    PaddleOCR: Found {len(rec_texts)} text regions total")
+
+            valid_count = 0
+            filtered_count = 0
 
             for text, bbox, score in zip(rec_texts, rec_polys, rec_scores):
                 text = text.strip()
                 # Show first point of bbox for debugging alignment
                 first_pt = bbox[0] if hasattr(bbox, '__getitem__') else None
-                print(f"    PaddleOCR: Detected '{text}' at {first_pt} with confidence {score:.2f}")
+
+                # Check if it's a valid number 0-10
                 if text.isdigit():
                     num = int(text)
                     if 0 <= num <= 10:
+                        print(f"    ✓ VALID: '{text}' at {first_pt} (confidence: {score:.2f})")
                         # Convert numpy array to list for consistency
                         bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else bbox
                         detections.append((num, bbox_list))
+                        valid_count += 1
+                    else:
+                        print(f"    ✗ FILTERED (out of range): '{text}' at {first_pt} (confidence: {score:.2f})")
+                        filtered_count += 1
+                else:
+                    print(f"    ✗ FILTERED (not digit): '{text}' at {first_pt} (confidence: {score:.2f})")
+                    filtered_count += 1
+
+            print(f"    Summary: {valid_count} valid numbers, {filtered_count} filtered out")
 
     print(f"    PaddleOCR found {len(detections)} valid numbers (0-10)")
     output_img = draw_bounding_boxes(img, detections, "PaddleOCR", preprocessed)
@@ -347,7 +362,14 @@ def main():
 
     try:
         easy_reader = easyocr.Reader(['en'], gpu=USE_GPU)
-        paddle_ocr = PaddleOCR(use_textline_orientation=False, lang='en')
+        # Lower detection thresholds to find more numbers
+        paddle_ocr = PaddleOCR(
+            use_textline_orientation=False,
+            lang='en',
+            det_db_thresh=0.2,  # Lower threshold for text detection (default: 0.3)
+            det_db_box_thresh=0.4,  # Lower threshold for bounding boxes (default: 0.6)
+            rec_batch_num=6  # Process more images in batch
+        )
         print("✓ Models loaded\n")
     except Exception as e:
         print(f"\n❌ Error loading models: {e}")
