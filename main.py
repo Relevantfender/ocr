@@ -72,13 +72,10 @@ def extract_color(image, hex_color, tolerance=30):
     # Create mask for the specific color
     mask = cv2.inRange(hsv, lower, upper)
 
-    # Clean up noise with larger kernel for better results
-    kernel = np.ones((5, 5), np.uint8)
+    # Clean up noise with minimal kernel to keep numbers sharp
+    kernel = np.ones((2, 2), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
-
-    # Dilate slightly to make numbers thicker/clearer
-    mask = cv2.dilate(mask, kernel, iterations=1)
 
     # Invert so we get BLACK numbers on WHITE background (standard for OCR)
     mask = cv2.bitwise_not(mask)
@@ -238,16 +235,23 @@ def process_with_paddleocr(image_path, ocr):
     # Preprocess if color extraction is enabled
     if TARGET_NUMBER_COLOR:
         preprocessed = extract_color(img, TARGET_NUMBER_COLOR, COLOR_TOLERANCE)
+        # PaddleOCR needs BGR image, convert grayscale to BGR
+        preprocessed_bgr = cv2.cvtColor(preprocessed, cv2.COLOR_GRAY2BGR)
         # Create temp path for preprocessed image
         temp_path = image_path.replace('input', 'output/preprocessed')
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-        cv2.imwrite(temp_path, preprocessed)
-        results = ocr.ocr(temp_path)
+        cv2.imwrite(temp_path, preprocessed_bgr)
+        results = ocr.predict(temp_path)
     else:
-        results = ocr.ocr(image_path)
+        results = ocr.predict(image_path)
 
     detections = []
-    if results and results[0]:
+
+    # Debug: Check what results look like
+    if not results or not results[0]:
+        print(f"    PaddleOCR: No text detected in image")
+    else:
+        print(f"    PaddleOCR: Found {len(results[0])} text regions")
         for line in results[0]:
             # PaddleOCR returns: [bbox, (text, confidence)]
             if len(line) == 2:
@@ -256,12 +260,13 @@ def process_with_paddleocr(image_path, ocr):
                 if isinstance(text_info, (list, tuple)) and len(text_info) == 2:
                     text, conf = text_info
                     text = text.strip()
+                    print(f"    PaddleOCR: Detected '{text}' with confidence {conf:.2f}")
                     if text.isdigit():
                         num = int(text)
                         if 0 <= num <= 10:
                             detections.append((num, bbox))
 
-    print(f"    PaddleOCR found {len(detections)} numbers")
+    print(f"    PaddleOCR found {len(detections)} valid numbers (0-10)")
     output_img = draw_bounding_boxes(img, detections, "PaddleOCR", preprocessed)
     return output_img
 
