@@ -232,109 +232,161 @@ def draw_bounding_boxes(image, detections, model_name, preprocessed=None):
     return canvas
 
 def process_with_easyocr(image_path, reader):
-    """Process image with EasyOCR"""
+    """Process image with EasyOCR - tests both polarities"""
     img = cv2.imread(image_path)
     preprocessed = None
+    best_detections = []
+    best_polarity = "original"
 
     # Preprocess if color extraction is enabled
     if TARGET_NUMBER_COLOR:
         preprocessed = extract_color(img, TARGET_NUMBER_COLOR, COLOR_TOLERANCE)
-        results = reader.readtext(preprocessed)
+
+        # Test both polarities: black-on-white (current) and white-on-black (inverted)
+        inverted = cv2.bitwise_not(preprocessed)
+
+        print(f"    Testing EasyOCR with both polarities...")
+
+        # Test 1: Black text on white background (current)
+        results_normal = reader.readtext(preprocessed)
+        detections_normal = []
+        for bbox, text, conf in results_normal:
+            text = text.strip()
+            if text.isdigit():
+                num = int(text)
+                if 0 <= num <= 10:
+                    detections_normal.append((num, bbox))
+
+        # Test 2: White text on black background (inverted)
+        results_inverted = reader.readtext(inverted)
+        detections_inverted = []
+        for bbox, text, conf in results_inverted:
+            text = text.strip()
+            if text.isdigit():
+                num = int(text)
+                if 0 <= num <= 10:
+                    detections_inverted.append((num, bbox))
+
+        # Choose the best result
+        if len(detections_inverted) > len(detections_normal):
+            best_detections = detections_inverted
+            best_polarity = "inverted (white-on-black)"
+            preprocessed = inverted  # Use inverted for display
+        else:
+            best_detections = detections_normal
+            best_polarity = "normal (black-on-white)"
+
+        print(f"    EasyOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)} → Using {best_polarity}")
+
     else:
         results = reader.readtext(image_path)
+        for bbox, text, conf in results:
+            text = text.strip()
+            if text.isdigit():
+                num = int(text)
+                if 0 <= num <= 10:
+                    best_detections.append((num, bbox))
 
-    detections = []
-    for bbox, text, conf in results:
-        text = text.strip()
-        if text.isdigit():
-            num = int(text)
-            if 0 <= num <= 10:
-                detections.append((num, bbox))
-
-    print(f"    EasyOCR found {len(detections)} numbers")
-    output_img = draw_bounding_boxes(img, detections, "EasyOCR", preprocessed)
+    print(f"    EasyOCR found {len(best_detections)} numbers")
+    output_img = draw_bounding_boxes(img, best_detections, "EasyOCR", preprocessed)
     return output_img
 
 
 def process_with_paddleocr(image_path, ocr):
-    """Process image with PaddleOCR"""
+    """Process image with PaddleOCR - tests both polarities"""
     img = cv2.imread(image_path)
     preprocessed = None
+    best_detections = []
+    best_polarity = "original"
+
+    def process_polarity(preprocessed_gray, polarity_name):
+        """Helper function to process one polarity"""
+        # PaddleOCR needs BGR image
+        preprocessed_bgr = cv2.cvtColor(preprocessed_gray, cv2.COLOR_GRAY2BGR)
+        assert preprocessed_bgr.shape[:2] == img.shape[:2], "BGR conversion changed dimensions!"
+
+        results = ocr.predict(preprocessed_bgr)
+        detections = []
+
+        if not results or not isinstance(results, list) or len(results) == 0:
+            return detections
+
+        result_obj = results[0]
+        if 'rec_texts' not in result_obj or not result_obj['rec_texts']:
+            return detections
+
+        rec_texts = result_obj['rec_texts']
+        rec_polys = result_obj['rec_polys']
+        rec_scores = result_obj['rec_scores']
+
+        for text, bbox, score in zip(rec_texts, rec_polys, rec_scores):
+            text = text.strip()
+            if text.isdigit():
+                num = int(text)
+                if 0 <= num <= 10:
+                    bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else bbox
+                    detections.append((num, bbox_list))
+
+        return detections
 
     # Preprocess if color extraction is enabled
     if TARGET_NUMBER_COLOR:
         preprocessed = extract_color(img, TARGET_NUMBER_COLOR, COLOR_TOLERANCE)
-
-        # DEBUG: Check dimensions
         print(f"    DEBUG: Original shape: {img.shape}, Preprocessed shape: {preprocessed.shape}")
 
-        # PaddleOCR needs BGR image, convert grayscale to BGR
-        preprocessed_bgr = cv2.cvtColor(preprocessed, cv2.COLOR_GRAY2BGR)
+        # Test both polarities
+        inverted = cv2.bitwise_not(preprocessed)
+        print(f"    Testing PaddleOCR with both polarities...")
 
-        # Verify BGR conversion didn't change dimensions
-        assert preprocessed_bgr.shape[:2] == img.shape[:2], "BGR conversion changed dimensions!"
+        # Test 1: Black text on white background (normal)
+        detections_normal = process_polarity(preprocessed, "normal")
 
-        # Save debug images for inspection
+        # Test 2: White text on black background (inverted)
+        detections_inverted = process_polarity(inverted, "inverted")
+
+        # Choose the best result
+        if len(detections_inverted) > len(detections_normal):
+            best_detections = detections_inverted
+            best_polarity = "inverted (white-on-black)"
+            preprocessed = inverted
+        else:
+            best_detections = detections_normal
+            best_polarity = "normal (black-on-white)"
+
+        print(f"    PaddleOCR: Normal={len(detections_normal)}, Inverted={len(detections_inverted)} → Using {best_polarity}")
+
+        # Save the best preprocessed version for inspection
         temp_path = image_path.replace('input', 'output/preprocessed')
         os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        preprocessed_bgr = cv2.cvtColor(preprocessed, cv2.COLOR_GRAY2BGR)
         cv2.imwrite(temp_path, preprocessed_bgr)
-        debug_path = temp_path.replace('.', '_debug.')
-        cv2.imwrite(debug_path, preprocessed)
-        print(f"    DEBUG: Saved preprocessed to {temp_path}")
+        print(f"    DEBUG: Saved best polarity ({best_polarity}) to {temp_path}")
 
-        # Pass image array directly to PaddleOCR instead of file path
-        # This avoids any potential issues with file I/O or reloading
-        print(f"    DEBUG: Passing image array of shape {preprocessed_bgr.shape} directly to PaddleOCR")
-        results = ocr.predict(preprocessed_bgr)
+        # Show details of detections
+        if best_detections:
+            print(f"    PaddleOCR: Found {len(best_detections)} valid numbers (0-10)")
+            for num, bbox in best_detections[:5]:  # Show first 5
+                first_pt = bbox[0] if bbox else None
+                print(f"    ✓ '{num}' at {first_pt}")
+            if len(best_detections) > 5:
+                print(f"    ... and {len(best_detections) - 5} more")
     else:
         results = ocr.predict(image_path)
+        # Process without preprocessing
+        if results and isinstance(results, list) and len(results) > 0:
+            result_obj = results[0]
+            if 'rec_texts' in result_obj and result_obj['rec_texts']:
+                rec_texts = result_obj['rec_texts']
+                rec_polys = result_obj['rec_polys']
+                for text, bbox in zip(rec_texts, rec_polys):
+                    text = text.strip()
+                    if text.isdigit():
+                        num = int(text)
+                        if 0 <= num <= 10:
+                            bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else bbox
+                            best_detections.append((num, bbox_list))
 
-    detections = []
-
-    # PaddleOCR predict() returns a list with one OCRResult object
-    if not results or not isinstance(results, list) or len(results) == 0:
-        print(f"    PaddleOCR: No results returned")
-    else:
-        result_obj = results[0]  # Get first (and only) result
-
-        # Access the OCRResult object's data
-        if 'rec_texts' not in result_obj or not result_obj['rec_texts']:
-            print(f"    PaddleOCR: No text detected in image")
-        else:
-            rec_texts = result_obj['rec_texts']
-            rec_polys = result_obj['rec_polys']
-            rec_scores = result_obj['rec_scores']
-
-            print(f"    PaddleOCR: Found {len(rec_texts)} text regions total")
-
-            valid_count = 0
-            filtered_count = 0
-
-            for text, bbox, score in zip(rec_texts, rec_polys, rec_scores):
-                text = text.strip()
-                # Show first point of bbox for debugging alignment
-                first_pt = bbox[0] if hasattr(bbox, '__getitem__') else None
-
-                # Check if it's a valid number 0-10
-                if text.isdigit():
-                    num = int(text)
-                    if 0 <= num <= 10:
-                        print(f"    ✓ VALID: '{text}' at {first_pt} (confidence: {score:.2f})")
-                        # Convert numpy array to list for consistency
-                        bbox_list = bbox.tolist() if hasattr(bbox, 'tolist') else bbox
-                        detections.append((num, bbox_list))
-                        valid_count += 1
-                    else:
-                        print(f"    ✗ FILTERED (out of range): '{text}' at {first_pt} (confidence: {score:.2f})")
-                        filtered_count += 1
-                else:
-                    print(f"    ✗ FILTERED (not digit): '{text}' at {first_pt} (confidence: {score:.2f})")
-                    filtered_count += 1
-
-            print(f"    Summary: {valid_count} valid numbers, {filtered_count} filtered out")
-
-    print(f"    PaddleOCR found {len(detections)} valid numbers (0-10)")
-    output_img = draw_bounding_boxes(img, detections, "PaddleOCR", preprocessed)
+    output_img = draw_bounding_boxes(img, best_detections, "PaddleOCR", preprocessed)
     return output_img
 
 def main():
