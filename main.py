@@ -177,7 +177,7 @@ def main():
     # Initialize models
     print("Initializing OCR models...")
     easy_reader = easyocr.Reader(['en'], gpu=False)
-    paddle_ocr = PaddleOCR(use_angle_cls=False, lang='en', show_log=False)
+    paddle_ocr = PaddleOCR(use_angle_cls=False, lang='en')
     print("✓ Models loaded\n")
 
     # Process each image
